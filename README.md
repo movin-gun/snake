@@ -83,9 +83,9 @@ python3 -m snake_game.game
 
 | 난이도 (Difficulty) | 게임판 크기 (Board Size) | 속도 (Speed) | 추천 대상 (Recommended For) |
 |------------|------------|-------|-----------------|
-| 🟢 쉬움 (Easy) | 15 x 30 | 느림 (Slow) | 초보자 (Beginners) |
-| 🟡 보통 (Medium) | 20 x 40 | 보통 (Normal) | 일반 플레이어 (Regular players) |
-| 🔴 어려움 (Hard) | 25 x 50 | 빠름 (Fast) | 고수 (Advanced players) |
+| 🟢 쉬움 (Easy) | 15 x 25 | 느림 (Slow) | 초보자 (Beginners) |
+| 🟡 보통 (Medium) | 20 x 35 | 보통 (Normal) | 일반 플레이어 (Regular players) |
+| 🔴 어려움 (Hard) | 25 x 45 | 빠름 (Fast) | 고수 (Advanced players) |
 
 ## 🎯 고득점 팁 (Tips for High Scores)
 
