@@ -6,6 +6,7 @@ import time
 import random
 import os
 import json
+import shutil
 from enum import Enum
 from datetime import datetime
 
@@ -15,30 +16,147 @@ class Direction(Enum):
     LEFT = (0, -1)
     RIGHT = (0, 1)
 
+class TerminalAdapter:
+    """Class for detecting and automatically adjusting terminal environment"""
+    
+    def __init__(self):
+        self.terminal_width, self.terminal_height = self.get_terminal_size()
+        self.terminal_type = self.detect_terminal_type()
+        self.char_ratio = self.detect_character_ratio()
+    
+    def get_terminal_size(self):
+        """Detect terminal size"""
+        try:
+            size = shutil.get_terminal_size()
+            return size.columns, size.lines
+        except:
+            return 80, 24  # Default value
+    
+    def detect_terminal_type(self):
+        """Detect terminal type"""
+        term_program = os.environ.get('TERM_PROGRAM', '')
+        term = os.environ.get('TERM', '')
+        
+        if 'iTerm' in term_program:
+            return 'iterm2'
+        elif 'Apple_Terminal' in term_program:
+            return 'terminal'
+        elif 'vscode' in term_program.lower():
+            return 'vscode'
+        elif 'hyper' in term_program.lower():
+            return 'hyper'
+        elif term.startswith('screen'):
+            return 'screen'
+        elif 'tmux' in os.environ.get('TMUX', ''):
+            return 'tmux'
+        else:
+            return 'generic'
+    
+    def detect_character_ratio(self):
+        """Detect character ratio for each terminal type"""
+        ratios = {
+            'iterm2': 1.8,      # iTerm2 typically uses 1.8:1 ratio
+            'terminal': 2.0,    # macOS Terminal uses 2:1 ratio
+            'vscode': 1.6,      # VS Code integrated terminal
+            'hyper': 1.7,       # Hyper terminal
+            'screen': 2.0,      # Screen session
+            'tmux': 2.0,        # Tmux session
+            'generic': 1.8      # Default value
+        }
+        return ratios.get(self.terminal_type, 1.8)
+    
+    def get_optimal_board_size(self, base_height, base_width):
+        """Calculate optimal board size for terminal"""
+        # Adjust based on terminal size
+        max_width = min(self.terminal_width - 4, base_width)  # Consider margins
+        max_height = min(self.terminal_height - 10, base_height)  # Consider UI space
+        
+        # Adjust width based on character ratio
+        adjusted_width = int(base_height * self.char_ratio * 0.8)  # 0.8 is correction factor
+        
+        # Determine final size
+        final_width = min(max_width, adjusted_width)
+        final_height = min(max_height, base_height)
+        
+        return (final_height, final_width)
+    
+    def get_speed_adjustment(self, direction):
+        """Speed adjustment for each terminal type"""
+        # Base adjustment values by terminal type
+        base_adjustments = {
+            'iterm2': {'vertical': 1.1, 'horizontal': 0.9},
+            'terminal': {'vertical': 1.2, 'horizontal': 0.85},
+            'vscode': {'vertical': 1.05, 'horizontal': 0.95},
+            'hyper': {'vertical': 1.1, 'horizontal': 0.9},
+            'generic': {'vertical': 1.1, 'horizontal': 0.9}
+        }
+        
+        adjustment = base_adjustments.get(self.terminal_type, base_adjustments['generic'])
+        
+        if direction in [Direction.UP, Direction.DOWN]:
+            return adjustment['vertical']
+        else:
+            return adjustment['horizontal']
+
 class Difficulty:
-    # 터미널 문자 비율 고려하여 높이:너비를 약 1:2 비율로 조정
-    EASY = {"name": "쉬움", "speed": 0.2, "board_size": (15, 25)}
-    MEDIUM = {"name": "보통", "speed": 0.1, "board_size": (20, 35)}
-    HARD = {"name": "어려움", "speed": 0.05, "board_size": (25, 45)}
+    """Difficulty settings - used with terminal adapter"""
+    
+    @staticmethod
+    def get_difficulty_settings(adapter=None):
+        if adapter is None:
+            adapter = TerminalAdapter()
+            
+        # Base settings
+        base_settings = {
+            'EASY': {"name": "Easy", "speed": 0.2, "base_board_size": (15, 25)},
+            'MEDIUM': {"name": "Medium", "speed": 0.1, "base_board_size": (20, 35)},
+            'HARD': {"name": "Hard", "speed": 0.05, "base_board_size": (25, 45)}
+        }
+        
+        # Adjust for terminal
+        for key, settings in base_settings.items():
+            base_height, base_width = settings['base_board_size']
+            optimized_size = adapter.get_optimal_board_size(base_height, base_width)
+            settings['board_size'] = optimized_size
+        
+        return base_settings
+    
+    # Static properties for compatibility
+    @staticmethod
+    def get_easy():
+        return Difficulty.get_difficulty_settings()['EASY']
+    
+    @staticmethod  
+    def get_medium():
+        return Difficulty.get_difficulty_settings()['MEDIUM']
+    
+    @staticmethod
+    def get_hard():
+        return Difficulty.get_difficulty_settings()['HARD']
+    
+    # Maintained for existing code compatibility
+    EASY = {"name": "Easy", "speed": 0.2, "board_size": (15, 25)}
+    MEDIUM = {"name": "Medium", "speed": 0.1, "board_size": (20, 35)}
+    HARD = {"name": "Hard", "speed": 0.05, "board_size": (25, 45)}
 
 class UIBox:
-    """텍스트 박스 생성 및 관리 클래스"""
+    """Text box creation and management class"""
     
     @staticmethod
     def get_text_width(text):
-        """텍스트의 실제 표시 너비 계산 (이모지 및 한글 고려)"""
+        """Calculate actual display width of text (considering emojis and Korean)"""
         width = 0
         i = 0
         while i < len(text):
             char = text[i]
-            if ord(char) > 127:  # 비ASCII 문자 (한글, 이모지 등)
-                # 이모지나 한글은 보통 2칸 너비
-                if ord(char) >= 0x1F600:  # 이모지 범위
+            if ord(char) > 127:  # Non-ASCII characters (Korean, emojis, etc.)
+                # Emojis and Korean characters typically take 2 columns
+                if ord(char) >= 0x1F600:  # Emoji range
                     width += 2
-                elif ord(char) >= 0xAC00:  # 한글 범위
+                elif ord(char) >= 0xAC00:  # Korean range
                     width += 2
                 else:
-                    width += 2  # 기타 유니코드 문자
+                    width += 2  # Other Unicode characters
             else:
                 width += 1
             i += 1
@@ -46,7 +164,7 @@ class UIBox:
     
     @staticmethod
     def pad_text(text, target_width, align='left'):
-        """텍스트를 지정된 너비로 패딩"""
+        """Pad text to specified width"""
         current_width = UIBox.get_text_width(text)
         padding_needed = target_width - current_width
         
@@ -64,24 +182,24 @@ class UIBox:
     
     @staticmethod
     def create_box(title, content_lines, width=65):
-        """동적 박스 생성"""
+        """Create dynamic box"""
         box_lines = []
-        inner_width = width - 2  # 양쪽 경계선 제외
+        inner_width = width - 2  # Exclude left and right borders
         
-        # 상단 경계선
+        # Top border
         box_lines.append("╔" + "═" * width + "╗")
         
-        # 제목
+        # Title
         if title:
             title_line = UIBox.pad_text(title, inner_width, 'center')
             box_lines.append("║" + title_line + "║")
             box_lines.append("╠" + "═" * width + "╣")
         
-        # 내용
+        # Content
         box_lines.append("║" + " " * inner_width + "║")
         
         for line in content_lines:
-            if isinstance(line, dict):  # 특수 포맷팅
+            if isinstance(line, dict):  # Special formatting
                 if line.get('type') == 'separator':
                     box_lines.append("║" + " " * inner_width + "║")
                 elif line.get('type') == 'menu_item':
@@ -97,28 +215,28 @@ class UIBox:
                     padded_line = UIBox.pad_text(formatted_line, inner_width)
                     box_lines.append("║" + padded_line + "║")
             else:
-                # 일반 텍스트
+                # Regular text
                 if len(line.strip()) == 0:
                     box_lines.append("║" + " " * inner_width + "║")
                 else:
                     padded_line = UIBox.pad_text(f"  {line}", inner_width)
                     box_lines.append("║" + padded_line + "║")
         
-        # 하단 여백 및 경계선
+        # Bottom margin and border
         box_lines.append("║" + " " * inner_width + "║")
         box_lines.append("╚" + "═" * width + "╝")
         
         return '\n'.join(box_lines)
 
 class ScoreManager:
-    """점수 관리 클래스"""
+    """Score management class"""
     
     def __init__(self):
         self.scores_file = os.path.expanduser("~/.snake_game_scores.json")
         self.scores = self.load_scores()
     
     def load_scores(self):
-        """저장된 점수 불러오기"""
+        """Load saved scores"""
         try:
             if os.path.exists(self.scores_file):
                 with open(self.scores_file, 'r', encoding='utf-8') as f:
@@ -128,15 +246,15 @@ class ScoreManager:
         return []
     
     def save_scores(self):
-        """점수 저장하기"""
+        """Save scores"""
         try:
             with open(self.scores_file, 'w', encoding='utf-8') as f:
                 json.dump(self.scores, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"점수 저장 중 오류 발생: {e}")
+            print(f"Error occurred while saving scores: {e}")
     
     def add_score(self, score, difficulty_name):
-        """새 점수 추가"""
+        """Add new score"""
         score_entry = {
             'score': score,
             'difficulty': difficulty_name,
@@ -144,42 +262,50 @@ class ScoreManager:
         }
         self.scores.append(score_entry)
         
-        # 점수순으로 정렬 (내림차순)
+        # Sort by score (descending)
         self.scores.sort(key=lambda x: x['score'], reverse=True)
         
-        # 상위 10개만 유지
+        # Keep only top 10
         self.scores = self.scores[:10]
         
         self.save_scores()
     
     def get_top_scores(self, limit=5):
-        """상위 점수 반환"""
+        """Return top scores"""
         return self.scores[:limit]
     
     def is_new_high_score(self, score):
-        """새로운 최고 기록인지 확인"""
+        """Check if this is a new high score"""
         if not self.scores:
             return True
         return score > self.scores[0]['score']
 
 class SnakeGame:
-    def __init__(self, difficulty):
+    def __init__(self, difficulty, terminal_adapter=None):
         self.difficulty = difficulty
-        self.height, self.width = difficulty["board_size"]
+        self.terminal_adapter = terminal_adapter or TerminalAdapter()
+        
+        # Use terminal-optimized board size
+        if 'base_board_size' in difficulty:
+            base_height, base_width = difficulty['base_board_size']
+            self.height, self.width = self.terminal_adapter.get_optimal_board_size(base_height, base_width)
+        else:
+            self.height, self.width = difficulty["board_size"]
+            
         self.speed = difficulty["speed"]
         self.score = 0
         self.running = True
         
-        # 스네이크 초기 위치 (중앙)
+        # Snake initial position (center)
         center_y, center_x = self.height // 2, self.width // 2
         self.snake = [(center_y, center_x), (center_y, center_x - 1), (center_y, center_x - 2)]
         self.direction = Direction.RIGHT
         self.next_direction = Direction.RIGHT
         
-        # 음식 생성
+        # Generate food
         self.food = self.generate_food()
         
-        # 터미널 설정
+        # Terminal settings
         self.old_settings = termios.tcgetattr(sys.stdin)
         tty.setcbreak(sys.stdin.fileno())
 
@@ -190,14 +316,14 @@ class SnakeGame:
                 return food_pos
 
     def get_key_press(self):
-        """논블로킹 키 입력"""
+        """Non-blocking key input"""
         import select
         if select.select([sys.stdin], [], [], 0.0)[0]:
             return sys.stdin.read(1)
         return None
 
 def get_menu_input():
-    """메뉴에서 방향키 입력을 처리하는 함수"""
+    """Function to handle arrow key input in menus"""
     old_settings = termios.tcgetattr(sys.stdin)
     try:
         tty.setcbreak(sys.stdin.fileno())
@@ -205,23 +331,23 @@ def get_menu_input():
         while True:
             key = sys.stdin.read(1)
             
-            if key == '\x1b':  # ESC 시퀀스 시작
+            if key == '\x1b':  # ESC sequence start
                 key2 = sys.stdin.read(1)
                 if key2 == '[':
                     key3 = sys.stdin.read(1)
-                    if key3 == 'A':  # 위쪽 화살표
+                    if key3 == 'A':  # Up arrow
                         return 'UP'
-                    elif key3 == 'B':  # 아래쪽 화살표
+                    elif key3 == 'B':  # Down arrow
                         return 'DOWN'
-                    elif key3 == 'C':  # 오른쪽 화살표
+                    elif key3 == 'C':  # Right arrow
                         return 'RIGHT'
-                    elif key3 == 'D':  # 왼쪽 화살표
+                    elif key3 == 'D':  # Left arrow
                         return 'LEFT'
             elif key == '\r' or key == '\n':  # Enter
                 return 'ENTER'
-            elif key in ['q', 'Q']:  # 종료
+            elif key in ['q', 'Q']:  # Quit
                 return 'QUIT'
-            elif key.isdigit():  # 숫자키 (기존 호환성)
+            elif key.isdigit():  # Number keys (existing compatibility)
                 return key
             
     finally:
@@ -230,17 +356,17 @@ def get_menu_input():
     def handle_input(self):
         key = self.get_key_press()
         if key:
-            if key == '\x1b':  # ESC 시퀀스 시작
+            if key == '\x1b':  # ESC sequence start
                 key2 = sys.stdin.read(1)
                 if key2 == '[':
                     key3 = sys.stdin.read(1)
-                    if key3 == 'A' and self.direction != Direction.DOWN:  # 위쪽
+                    if key3 == 'A' and self.direction != Direction.DOWN:  # Up
                         self.next_direction = Direction.UP
-                    elif key3 == 'B' and self.direction != Direction.UP:  # 아래쪽
+                    elif key3 == 'B' and self.direction != Direction.UP:  # Down
                         self.next_direction = Direction.DOWN
-                    elif key3 == 'C' and self.direction != Direction.LEFT:  # 오른쪽
+                    elif key3 == 'C' and self.direction != Direction.LEFT:  # Right
                         self.next_direction = Direction.RIGHT
-                    elif key3 == 'D' and self.direction != Direction.RIGHT:  # 왼쪽
+                    elif key3 == 'D' and self.direction != Direction.RIGHT:  # Left
                         self.next_direction = Direction.LEFT
             elif key in ['q', 'Q']:
                 self.running = False
@@ -251,18 +377,18 @@ def get_menu_input():
         dy, dx = self.direction.value
         new_head = (head[0] + dy, head[1] + dx)
         
-        # 벽 충돌 체크
+        # Check wall collision
         if (new_head[0] <= 0 or new_head[0] >= self.height - 1 or 
             new_head[1] <= 0 or new_head[1] >= self.width - 1):
             return False
         
-        # 자기 자신과 충돌 체크
+        # Check self-collision
         if new_head in self.snake:
             return False
         
         self.snake.insert(0, new_head)
         
-        # 음식 먹었는지 체크
+        # Check if food was eaten
         if new_head == self.food:
             self.score += 10
             self.food = self.generate_food()
@@ -274,52 +400,52 @@ def get_menu_input():
     def draw_board(self):
         os.system('clear' if os.name == 'posix' else 'cls')
         
-        print(f"점수: {self.score} | 난이도: {self.difficulty['name']} | 종료: Q")
+        print(f"Score: {self.score} | Difficulty: {self.difficulty['name']} | Quit: Q")
         print("=" * (self.width + 2))
         
         for y in range(self.height):
             row = ""
             for x in range(self.width):
                 if y == 0 or y == self.height - 1 or x == 0 or x == self.width - 1:
-                    row += "█"
-                elif (y, x) == self.snake[0]:  # 머리
-                    row += "●"
-                elif (y, x) in self.snake:  # 몸
-                    row += "○"
-                elif (y, x) == self.food:  # 음식
-                    row += "◆"
+                    row += "#"
+                elif (y, x) == self.snake[0]:  # head
+                    row += "@"
+                elif (y, x) in self.snake:  # body
+                    row += "o"
+                elif (y, x) == self.food:  # food
+                    row += "*"
                 else:
                     row += " "
             print(row)
         
         print("=" * (self.width + 2))
-        print("방향키로 이동, Q로 종료")
+        print("Arrow keys to move, Q to quit")
 
     def game_over(self, score_manager):
         os.system('clear' if os.name == 'posix' else 'cls')
         
-        # 새로운 최고 기록인지 확인 (저장하기 전에)
+        # Check if it's a new high score (before saving)
         is_high_score = score_manager.is_new_high_score(self.score)
         
-        # 점수 저장
+        # Save score
         score_manager.add_score(self.score, self.difficulty['name'])
         
         content = [
-            "게임 오버!",
+            "GAME OVER!",
             {"type": "separator"},
-            f"최종 점수: {self.score}점",
-            f"난이도: {self.difficulty['name']}",
+            f"Final Score: {self.score} points",
+            f"Difficulty: {self.difficulty['name']}",
             {"type": "separator"}
         ]
         
         if is_high_score and self.score > 0:
             content.extend([
-                "🎉 새로운 최고 기록입니다! 🎉",
+                "*** NEW HIGH SCORE! ***",
                 {"type": "separator"}
             ])
         
         content.extend([
-            "💡 재시작하려면 'y', 메뉴로 돌아가려면 'n'을 입력하세요"
+            "Press 'y' to restart, 'n' to return to menu"
         ])
         
         box = UIBox.create_box("", content)
@@ -329,14 +455,12 @@ def get_menu_input():
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
 
     def get_adjusted_speed(self):
-        """방향에 따른 속도 조정 - 터미널 문자 간격 차이 보정"""
+        """Speed adjustment according to terminal environment"""
         base_speed = self.speed
         
-        # 터미널에서 문자의 세로 간격이 가로 간격보다 약 1.5~2배 크므로 조정
-        if self.direction in [Direction.UP, Direction.DOWN]:
-            return base_speed * 1.1  # 10% 느리게 (세로 간격 보정)
-        else:  # LEFT, RIGHT
-            return base_speed * 0.9  # 10% 빠르게 (가로 간격 보정)
+        # Precise speed adjustment through TerminalAdapter
+        adjustment = self.terminal_adapter.get_speed_adjustment(self.direction)
+        return base_speed * adjustment
     
     def run(self, score_manager=None):
         if score_manager is None:
@@ -350,7 +474,7 @@ def get_menu_input():
                 if not self.move_snake():
                     break
                 
-                # 방향에 따른 조정된 속도 사용
+                # Use adjusted speed based on direction
                 adjusted_speed = self.get_adjusted_speed()
                 time.sleep(adjusted_speed)
             
@@ -360,7 +484,7 @@ def get_menu_input():
             self.cleanup()
 
 def show_logo():
-    """게임 로고 화면 표시"""
+    """Display game logo screen"""
     os.system('clear' if os.name == 'posix' else 'cls')
     logo = """
     ╔═══════════════════════════════════════════════════════════════╗
@@ -371,105 +495,122 @@ def show_logo():
     ║         ██ ██  ██ ██ ██   ██ ██  ██  ██         ██    ██     ║
     ║    ███████ ██   ████ ██   ██ ██   ██ ███████     ██████      ║
     ║                                                               ║
-    ║                      🐍 클래식 스네이크 게임 🐍                ║
+    ║                       CLASSIC SNAKE GAME                     ║
     ║                                                               ║
-    ║              터미널에서 즐기는 레트로 아케이드 게임              ║
+    ║                  Retro Arcade Game for Terminal               ║
     ║                                                               ║
     ╚═══════════════════════════════════════════════════════════════╝
     """
     print(logo)
     print("\n" + "═" * 67)
-    print("                      아무 키나 눌러 시작하세요...")
+    print("                     Press any key to start...")
     print("═" * 67)
     
-    # 키 입력 대기
+    # Wait for key input
     try:
         input()
     except KeyboardInterrupt:
         sys.exit(0)
 
 def show_main_menu(selected_index=0):
-    """메인 메뉴 화면"""
+    """Main menu screen"""
     os.system('clear' if os.name == 'posix' else 'cls')
     
     menu_items = [
-        {"type": "menu_item", "prefix": "🎮  ", "text": "게임 시작", "selected": selected_index == 0},
-        {"type": "menu_item", "prefix": "🎯  ", "text": "게임 방법", "selected": selected_index == 1},
-        {"type": "menu_item", "prefix": "⚙️   ", "text": "난이도 설정", "selected": selected_index == 2},
-        {"type": "menu_item", "prefix": "🏆  ", "text": "최고 기록", "selected": selected_index == 3},
-        {"type": "menu_item", "prefix": "🚪  ", "text": "게임 종료", "selected": selected_index == 4}
+        {"type": "menu_item", "prefix": "[1] ", "text": "Start Game", "selected": selected_index == 0},
+        {"type": "menu_item", "prefix": "[2] ", "text": "How to Play", "selected": selected_index == 1},
+        {"type": "menu_item", "prefix": "[3] ", "text": "Difficulty", "selected": selected_index == 2},
+        {"type": "menu_item", "prefix": "[4] ", "text": "High Scores", "selected": selected_index == 3},
+        {"type": "menu_item", "prefix": "[5] ", "text": "Exit Game", "selected": selected_index == 4}
     ]
     
     content = menu_items + [
         {"type": "separator"},
-        "방향키로 선택, Enter로 확인, Q로 종료"
+        "Use arrow keys to navigate, Enter to select, Q to quit"
     ]
     
-    box = UIBox.create_box("메인 메뉴", content)
+    box = UIBox.create_box("MAIN MENU", content)
     print(box)
 
 def show_how_to_play():
-    """게임 방법 설명"""
+    """Game instructions"""
     os.system('clear' if os.name == 'posix' else 'cls')
     instructions = """
 ╔═══════════════════════════════════════════════════════════════╗
-║                          게임 방법                             ║
+║                          HOW TO PLAY                          ║
 ╠═══════════════════════════════════════════════════════════════╣
 ║                                                               ║
-║  🕹️  조작법:                                                   ║
-║     ↑ ↓ ← →  방향키로 스네이크를 조작합니다                     ║
-║     Q        게임을 종료합니다                                 ║
+║  CONTROLS:                                                    ║
+║     ↑ ↓ ← →  Use arrow keys to control the snake             ║
+║     Q        Quit the game                                    ║
 ║                                                               ║
-║  🎯  목표:                                                     ║
-║     ● 스네이크의 머리 (●)                                      ║
-║     ○ 스네이크의 몸 (○)                                        ║
-║     ◆ 음식 (◆)을 먹으면 점수가 올라가고 스네이크가 자랍니다     ║
+║  OBJECTIVE:                                                   ║
+║     @ Snake head (@)                                          ║
+║     o Snake body (o)                                          ║
+║     * Food (*) - eat to grow and increase score              ║
 ║                                                               ║
-║  ⚠️  주의사항:                                                  ║
-║     • 벽에 부딪히면 게임이 끝납니다                            ║
-║     • 자신의 몸에 부딪혀도 게임이 끝납니다                     ║
-║     • 음식을 먹을 때마다 10점을 획득합니다                     ║
+║  RULES:                                                       ║
+║     • Game ends if you hit the walls                         ║
+║     • Game ends if you hit your own body                     ║
+║     • Each food gives you 10 points                          ║
 ║                                                               ║
-║  🏆  목표: 최대한 많은 음식을 먹고 높은 점수를 달성하세요!       ║
+║  GOAL: Eat as much food as possible to achieve high score!   ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
     print(instructions)
-    print("\n아무 키나 눌러 메인 메뉴로 돌아가세요...")
+    print("\nPress any key to return to main menu...")
     input()
 
-def show_difficulty_menu(selected_index=0):
-    """난이도 선택 메뉴"""
+def show_difficulty_menu(selected_index=0, terminal_adapter=None):
+    """Difficulty selection menu"""
     os.system('clear' if os.name == 'posix' else 'cls')
     
+    if terminal_adapter is None:
+        terminal_adapter = TerminalAdapter()
+    
+    difficulty_settings = Difficulty.get_difficulty_settings(terminal_adapter)
+    
     difficulty_items = [
-        {"name": "🟢  쉬움", "details": ["게임판 크기: 15 x 25", "속도: 느림 (초보자용)", "추천: 처음 하시는 분"]},
-        {"name": "🟡  보통", "details": ["게임판 크기: 20 x 35", "속도: 보통 (일반용)", "추천: 기본적인 게임 경험이 있으신 분"]},
-        {"name": "🔴  어려움", "details": ["게임판 크기: 25 x 45", "속도: 빠름 (고수용)", "추천: 도전을 원하시는 분"]},
-        {"name": "🔙  메인 메뉴로 돌아가기", "details": []}
+        {"name": "[1] Easy", "details": [
+            f"Board size: {difficulty_settings['EASY']['board_size'][0]} x {difficulty_settings['EASY']['board_size'][1]}", 
+            "Speed: Slow (For beginners)", 
+            "Recommended for: First-time players"
+        ]},
+        {"name": "[2] Medium", "details": [
+            f"Board size: {difficulty_settings['MEDIUM']['board_size'][0]} x {difficulty_settings['MEDIUM']['board_size'][1]}", 
+            "Speed: Normal (For regular players)", 
+            "Recommended for: Players with basic experience"
+        ]},
+        {"name": "[3] Hard", "details": [
+            f"Board size: {difficulty_settings['HARD']['board_size'][0]} x {difficulty_settings['HARD']['board_size'][1]}", 
+            "Speed: Fast (For experts)", 
+            "Recommended for: Challenge seekers"
+        ]},
+        {"name": "[4] Back to Main Menu", "details": []}
     ]
     
     print("╔═══════════════════════════════════════════════════════════════╗")
-    print("║                        난이도 선택                             ║")
+    print("║                      SELECT DIFFICULTY                        ║")
     print("╠═══════════════════════════════════════════════════════════════╣")
     print("║                                                               ║")
     
     for i, item in enumerate(difficulty_items):
         if i == selected_index:
-            print(f"║  ► {item['name']}                                           ║")
+            print(f"║  > {item['name']}                                          ║"[:67] + "║")
         else:
-            print(f"║    {item['name']}                                           ║")
+            print(f"║    {item['name']}                                          ║"[:67] + "║")
             
         if item['details']:
             for detail in item['details']:
-                print(f"║      • {detail}                                   ║"[:67] + "║")
+                print(f"║      - {detail}                                   ║"[:67] + "║")
             print("║                                                               ║")
     
     print("╚═══════════════════════════════════════════════════════════════╝")
-    print("\n방향키로 선택, Enter로 확인, Q로 뒤로가기")
+    print("\nUse arrow keys to select, Enter to confirm, Q to go back")
 
 def show_high_scores():
-    """최고 기록 표시"""
+    """Display high scores"""
     os.system('clear' if os.name == 'posix' else 'cls')
     
     score_manager = ScoreManager()
@@ -479,46 +620,44 @@ def show_high_scores():
     
     if not top_scores:
         content.extend([
-            "아직 기록된 점수가 없습니다.",
+            "No scores recorded yet.",
             {"type": "separator"},
-            "첫 번째 게임을 시작해보세요! 🎮"
+            "Start your first game to set a record!"
         ])
     else:
-        content.append("🏆 순위    난이도      점수       날짜")
-        content.append("─" * 50)
-        
-        rank_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        content.append("RANK   DIFFICULTY   SCORE     DATE")
+        content.append("-" * 50)
         
         for i, score_entry in enumerate(top_scores):
-            if i < len(rank_emojis):
-                emoji = rank_emojis[i]
-            else:
-                emoji = f"{i+1}."
+            rank = f"#{i+1}".ljust(6)
+            difficulty = score_entry['difficulty'].ljust(12)
+            score = f"{score_entry['score']} pts".ljust(10)
+            date = score_entry['date']
                 
-            score_line = f"  {emoji}     {score_entry['difficulty']}      {score_entry['score']}점    {score_entry['date']}"
+            score_line = f"{rank} {difficulty} {score} {date}"
             content.append(score_line)
     
     content.extend([
         {"type": "separator"},
-        "💡 최고 기록 달성을 위한 팁:",
-        "• 벽 근처에서는 신중하게 움직이세요",
-        "• 꼬리를 피하기 위해 넓은 공간을 확보하세요", 
-        "• 음식 위치를 미리 계산해서 효율적으로 이동하세요",
+        "TIPS FOR HIGH SCORES:",
+        "- Move carefully near walls",
+        "- Keep open space to avoid trapping yourself", 
+        "- Plan your path to food efficiently",
         {"type": "separator"},
-        "아무 키나 눌러 메인 메뉴로 돌아가세요..."
+        "Press any key to return to main menu..."
     ])
     
-    box = UIBox.create_box("최고 기록", content)
+    box = UIBox.create_box("HIGH SCORES", content)
     print(box)
     input()
 
-def select_difficulty():
-    """난이도 선택 함수"""
+def select_difficulty(terminal_adapter=None):
+    """Difficulty selection function"""
     selected_index = 0
-    max_index = 3  # 4개 선택지 (0-3)
+    max_index = 3  # 4 options (0-3)
     
     while True:
-        show_difficulty_menu(selected_index)
+        show_difficulty_menu(selected_index, terminal_adapter)
         
         try:
             key = get_menu_input()
@@ -529,23 +668,23 @@ def select_difficulty():
                 selected_index = (selected_index + 1) % (max_index + 1)
             elif key == 'ENTER':
                 if selected_index == 0:
-                    return Difficulty.EASY
+                    return 'EASY'
                 elif selected_index == 1:
-                    return Difficulty.MEDIUM
+                    return 'MEDIUM'
                 elif selected_index == 2:
-                    return Difficulty.HARD
+                    return 'HARD'
                 elif selected_index == 3:
-                    return None  # 메인 메뉴로 돌아가기
+                    return None  # Return to main menu
             elif key == 'QUIT' or key == 'q':
                 return None
-            elif key in ['1', '2', '3', '4']:  # 기존 숫자키 지원
+            elif key in ['1', '2', '3', '4']:  # Existing number key support
                 choice = int(key)
                 if choice == 1:
-                    return Difficulty.EASY
+                    return 'EASY'
                 elif choice == 2:
-                    return Difficulty.MEDIUM
+                    return 'MEDIUM'
                 elif choice == 3:
-                    return Difficulty.HARD
+                    return 'HARD'
                 elif choice == 4:
                     return None
                 
@@ -553,14 +692,25 @@ def select_difficulty():
             return None
 
 def main():
-    # 로고 표시
+    # Initialize terminal adapter
+    terminal_adapter = TerminalAdapter()
+    
+    # Display logo
     show_logo()
     
-    # 기본 난이도 설정 및 점수 관리자 초기화
-    current_difficulty = Difficulty.MEDIUM
+    # Terminal-optimized difficulty settings
+    difficulty_settings = Difficulty.get_difficulty_settings(terminal_adapter)
+    current_difficulty = difficulty_settings['MEDIUM']
     score_manager = ScoreManager()
     selected_index = 0
-    max_index = 4  # 5개 메뉴 (0-4)
+    max_index = 4  # 5 menu items (0-4)
+    
+    # Display terminal info (debug - first run only)
+    print(f"Terminal: {terminal_adapter.terminal_type} ({terminal_adapter.terminal_width}x{terminal_adapter.terminal_height})")
+    print(f"Character ratio: {terminal_adapter.char_ratio:.1f}:1")
+    print(f"Optimized board: {current_difficulty['board_size']}")
+    print("\nPress any key to continue...")
+    input()
     
     while True:
         show_main_menu(selected_index)
@@ -573,103 +723,105 @@ def main():
             elif key == 'DOWN':
                 selected_index = (selected_index + 1) % (max_index + 1)
             elif key == 'ENTER':
-                if selected_index == 0:  # 게임 시작
-                    game = SnakeGame(current_difficulty)
+                if selected_index == 0:  # Start game
+                    game = SnakeGame(current_difficulty, terminal_adapter)
                     game.run(score_manager)
                     
-                    # 게임 종료 후 재시작 여부 확인
+                    # Check restart after game ends
                     while True:
                         restart = input().strip().lower()
                         if restart in ['y', 'yes', 'ㅛ']:
-                            game = SnakeGame(current_difficulty)
+                            game = SnakeGame(current_difficulty, terminal_adapter)
                             game.run(score_manager)
                         elif restart in ['n', 'no', 'ㅜ']:
                             break
                         else:
-                            print("y 또는 n을 입력해주세요.")
+                            print("Please enter y or n.")
                             
-                elif selected_index == 1:  # 게임 방법
+                elif selected_index == 1:  # How to play
                     show_how_to_play()
                     
-                elif selected_index == 2:  # 난이도 설정
-                    selected_difficulty = select_difficulty()
-                    if selected_difficulty:
-                        current_difficulty = selected_difficulty
+                elif selected_index == 2:  # Difficulty settings
+                    selected_difficulty_key = select_difficulty(terminal_adapter)
+                    if selected_difficulty_key:
+                        current_difficulty = difficulty_settings[selected_difficulty_key]
                         os.system('clear' if os.name == 'posix' else 'cls')
-                        print(f"난이도가 '{current_difficulty['name']}'로 설정되었습니다!")
-                        print("아무 키나 눌러 계속하세요...")
+                        print(f"Difficulty set to '{current_difficulty['name']}'!")
+                        print(f"Board size: {current_difficulty['board_size']}")
+                        print("Press any key to continue...")
                         input()
                         
-                elif selected_index == 3:  # 최고 기록
+                elif selected_index == 3:  # High scores
                     show_high_scores()
                     
-                elif selected_index == 4:  # 게임 종료
+                elif selected_index == 4:  # Exit game
                     os.system('clear' if os.name == 'posix' else 'cls')
                     print("╔═══════════════════════════════════════════════════════════════╗")
-                    print("║                       게임을 종료합니다                        ║")
+                    print("║                          Exiting game                         ║")
                     print("║                                                               ║")
-                    print("║                🐍 플레이해 주셔서 감사합니다! 🐍                ║")
+                    print("║                   Thanks for playing Snake!                   ║")
                     print("║                                                               ║")
                     print("╚═══════════════════════════════════════════════════════════════╝")
                     break
                     
-            elif key == 'QUIT':  # Q키로 직접 종료
+            elif key == 'QUIT':  # Direct exit with Q key
                 os.system('clear' if os.name == 'posix' else 'cls')
                 print("╔═══════════════════════════════════════════════════════════════╗")
-                print("║                       게임을 종료합니다                        ║")
+                print("║                          Exiting game                         ║")
                 print("║                                                               ║")
-                print("║                🐍 플레이해 주셔서 감사합니다! 🐍                ║")
+                print("║                   Thanks for playing Snake!                   ║")
                 print("║                                                               ║")
                 print("╚═══════════════════════════════════════════════════════════════╝")
                 break
                 
-            elif key in ['1', '2', '3', '4', '5']:  # 기존 숫자키 지원
+            elif key in ['1', '2', '3', '4', '5']:  # Existing number key support
                 choice = int(key)
-                if choice == 1:  # 게임 시작
-                    game = SnakeGame(current_difficulty)
+                if choice == 1:  # Start game
+                    game = SnakeGame(current_difficulty, terminal_adapter)
                     game.run(score_manager)
                     
-                    # 게임 종료 후 재시작 여부 확인
+                    # Check restart after game ends
                     while True:
                         restart = input().strip().lower()
                         if restart in ['y', 'yes', 'ㅛ']:
-                            game = SnakeGame(current_difficulty)
+                            game = SnakeGame(current_difficulty, terminal_adapter)
                             game.run(score_manager)
                         elif restart in ['n', 'no', 'ㅜ']:
                             break
                         else:
-                            print("y 또는 n을 입력해주세요.")
+                            print("Please enter y or n.")
                             
-                elif choice == 2:  # 게임 방법
+                elif choice == 2:  # How to play
                     show_how_to_play()
                     
-                elif choice == 3:  # 난이도 설정
-                    selected_difficulty = select_difficulty()
-                    if selected_difficulty:
-                        current_difficulty = selected_difficulty
+                elif choice == 3:  # Difficulty settings
+                    selected_difficulty_key = select_difficulty(terminal_adapter)
+                    if selected_difficulty_key:
+                        current_difficulty = difficulty_settings[selected_difficulty_key]
                         os.system('clear' if os.name == 'posix' else 'cls')
-                        print(f"난이도가 '{current_difficulty['name']}'로 설정되었습니다!")
-                        print("아무 키나 눌러 계속하세요...")
+                        print(f"Difficulty set to '{current_difficulty['name']}'!")
+                        print(f"Board size: {current_difficulty['board_size']}")
+                        print("Press any key to continue...")
                         input()
                         
-                elif choice == 4:  # 최고 기록
+                elif choice == 4:  # High scores
                     show_high_scores()
                     
-                elif choice == 5:  # 게임 종료
+                elif choice == 5:  # Exit game
                     os.system('clear' if os.name == 'posix' else 'cls')
                     print("╔═══════════════════════════════════════════════════════════════╗")
-                    print("║                       게임을 종료합니다                        ║")
+                    print("║                          Exiting game                         ║")
                     print("║                                                               ║")
-                    print("║                🐍 플레이해 주셔서 감사합니다! 🐍                ║")
+                    print("║                   Thanks for playing Snake!                   ║")
                     print("║                                                               ║")
                     print("╚═══════════════════════════════════════════════════════════════╝")
                     break
             
         except KeyboardInterrupt:
-            print("\n게임을 종료합니다.")
+            print("\nExiting game.")
             break
         except Exception as e:
-            print(f"오류가 발생했습니다: {e}")
+            print(f"An error occurred: {e}")
             time.sleep(2)
 
 if __name__ == "__main__":

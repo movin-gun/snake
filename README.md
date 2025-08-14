@@ -13,20 +13,7 @@ A classic snake game that runs in your terminal! Experience the nostalgic arcade
 
 ## 🚀 설치 방법 (Installation)
 
-### 🍺 홈브루로 설치 (추천 방법)
-
-```bash
-# 탭 추가
-brew tap movin-gun/snake
-
-# 게임 설치
-brew install snake-game-cli
-
-# 게임 실행
-snakegame
-```
-
-### 📦 pip으로 설치
+### 🐍 pip으로 설치 (추천 방법)
 
 ```bash
 # 저장소에서 직접 설치
@@ -38,15 +25,31 @@ pip install .
 snakegame
 ```
 
-### 🔧 소스에서 직접 실행
+### 🔧 소스에서 직접 실행 (설치 불필요)
 
 ```bash
 # 저장소 복제
 git clone https://github.com/movin-gun/snake.git
 cd snake
 
-# 바로 실행 (설치 불필요)
+# 바로 실행
 python3 -m snake_game.game
+```
+
+### 📱 원클릭 실행 (macOS/Linux)
+
+```bash
+# 임시 디렉토리에서 바로 실행
+curl -s https://raw.githubusercontent.com/movin-gun/snake/main/quick_start.sh | bash
+```
+
+### 🍺 홈브루로 설치 (향후 지원 예정)
+
+```bash
+# 현재는 지원되지 않습니다
+# brew tap movin-gun/snake
+# brew install snake-game-cli
+# snakegame
 ```
 
 ## 🎮 게임 실행 방법 (How to Play)
