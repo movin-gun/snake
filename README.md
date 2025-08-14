@@ -11,78 +11,88 @@ A classic snake game that runs in your terminal! Experience the nostalgic arcade
 - ⌨️ **Intuitive Controls**: Simple arrow key navigation
 - 📱 **Cross-platform**: Works on macOS, Linux, and Windows
 
-## 🚀 Installation
+## 🚀 설치 방법 (Installation)
 
-### Via Homebrew (macOS/Linux)
+### 🍺 홈브루로 설치 (추천 방법)
 
 ```bash
-# Add the tap (if available)
+# 탭 추가
 brew tap movin-gun/snake
 
-# Install the game
+# 게임 설치
 brew install snake-game-cli
+
+# 게임 실행
+snakegame
 ```
 
-### Via pip
+### 📦 pip으로 설치
 
 ```bash
-pip install snake-game-cli
+# 저장소에서 직접 설치
+git clone https://github.com/movin-gun/snake.git
+cd snake
+pip install .
+
+# 게임 실행
+snakegame
 ```
 
-### Manual Installation
+### 🔧 소스에서 직접 실행
 
 ```bash
-# Clone the repository
+# 저장소 복제
 git clone https://github.com/movin-gun/snake.git
 cd snake
 
-# Install using pip
-pip install .
+# 바로 실행 (설치 불필요)
+python3 -m snake_game.game
 ```
 
-## 🎮 How to Play
+## 🎮 게임 실행 방법 (How to Play)
 
-### Starting the Game
+### 게임 시작하기
 
 ```bash
-# Run the game
-snake-game
+# 홈브루 또는 pip 설치 후
+snakegame
 
-# Or use the short command
+# 다른 명령어들
+snake-game
 snake
 
-# Or run directly from source
-python -m snake_game.game
+# 소스에서 직접 실행 (설치 없이)
+python3 -m snake_game.game
 ```
 
-### Game Controls
+### 게임 조작법 (Game Controls)
 
-- **Arrow Keys**: Move the snake (↑ ↓ ← →)
-- **Q**: Quit the current game
-- **Menu Navigation**: Use number keys (1-5) to navigate menus
+- **방향키 (Arrow Keys)**: 스네이크 이동 (↑ ↓ ← →)
+- **Q키**: 현재 게임 종료
+- **메뉴 탐색**: 숫자키 (1-5)로 메뉴 선택
 
-### Game Rules
+### 게임 규칙 (Game Rules)
 
-1. **Objective**: Eat food (◆) to grow your snake and increase your score
-2. **Movement**: Your snake moves continuously in the direction you choose
-3. **Growth**: Each food item eaten adds one segment to your snake
-4. **Scoring**: Earn 10 points for each food item consumed
-5. **Game Over**: The game ends if you hit the walls or your own body
+1. **목표**: 음식 (◆)을 먹어서 스네이크를 키우고 점수 획득
+2. **이동**: 스네이크는 선택한 방향으로 계속 이동
+3. **성장**: 음식을 먹을 때마다 스네이크가 한 칸씩 길어짐
+4. **점수**: 음식 하나당 10점 획득
+5. **게임 오버**: 벽이나 자신의 몸에 부딪히면 게임 종료
 
-### Difficulty Levels
+### 난이도 단계 (Difficulty Levels)
 
-| Difficulty | Board Size | Speed | Recommended For |
+| 난이도 (Difficulty) | 게임판 크기 (Board Size) | 속도 (Speed) | 추천 대상 (Recommended For) |
 |------------|------------|-------|-----------------|
-| 🟢 Easy | 15 x 30 | Slow | Beginners |
-| 🟡 Medium | 20 x 40 | Normal | Regular players |
-| 🔴 Hard | 25 x 50 | Fast | Advanced players |
+| 🟢 쉬움 (Easy) | 15 x 30 | 느림 (Slow) | 초보자 (Beginners) |
+| 🟡 보통 (Medium) | 20 x 40 | 보통 (Normal) | 일반 플레이어 (Regular players) |
+| 🔴 어려움 (Hard) | 25 x 50 | 빠름 (Fast) | 고수 (Advanced players) |
 
-## 🎯 Tips for High Scores
+## 🎯 고득점 팁 (Tips for High Scores)
 
-- 💡 **Stay in Open Areas**: Avoid getting trapped near walls
-- 💡 **Plan Your Route**: Think ahead about where the food will appear
-- 💡 **Control Your Speed**: Don't rush, especially in tight spaces
-- 💡 **Use the Edges**: Sometimes hugging walls can help create space
+- 💡 **넓은 공간 활용**: 벽 근처에서 갇히지 않도록 주의
+- 💡 **경로 계획**: 음식이 나타날 위치를 미리 예측하여 이동
+- 💡 **속도 조절**: 좁은 공간에서는 서두르지 말고 신중하게
+- 💡 **벽 활용**: 때로는 벽을 따라 이동하여 공간 확보
 
 ## 🛠️ Development
 

@@ -43,6 +43,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
+            "snakegame=snake_game:cli",
             "snake-game=snake_game:cli",
             "snake=snake_game:cli",
         ],
