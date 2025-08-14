@@ -187,44 +187,44 @@ class UIBox:
         inner_width = width - 2  # Exclude left and right borders
         
         # Top border
-        box_lines.append("╔" + "═" * width + "╗")
+        box_lines.append("+" + "-" * width + "+")
         
         # Title
         if title:
             title_line = UIBox.pad_text(title, inner_width, 'center')
-            box_lines.append("║" + title_line + "║")
-            box_lines.append("╠" + "═" * width + "╣")
+            box_lines.append("|" + title_line + "|")
+            box_lines.append("+" + "-" * width + "+")
         
         # Content
-        box_lines.append("║" + " " * inner_width + "║")
+        box_lines.append("|" + " " * inner_width + "|")
         
         for line in content_lines:
             if isinstance(line, dict):  # Special formatting
                 if line.get('type') == 'separator':
-                    box_lines.append("║" + " " * inner_width + "║")
+                    box_lines.append("|" + " " * inner_width + "|")
                 elif line.get('type') == 'menu_item':
                     prefix = line.get('prefix', '')
                     text = line.get('text', '')
                     selected = line.get('selected', False)
                     
                     if selected:
-                        formatted_line = f"► {prefix}{text}"
+                        formatted_line = f"> {prefix}{text}"
                     else:
                         formatted_line = f"  {prefix}{text}"
                     
                     padded_line = UIBox.pad_text(formatted_line, inner_width)
-                    box_lines.append("║" + padded_line + "║")
+                    box_lines.append("|" + padded_line + "|")
             else:
                 # Regular text
                 if len(line.strip()) == 0:
-                    box_lines.append("║" + " " * inner_width + "║")
+                    box_lines.append("|" + " " * inner_width + "|")
                 else:
                     padded_line = UIBox.pad_text(f"  {line}", inner_width)
-                    box_lines.append("║" + padded_line + "║")
+                    box_lines.append("|" + padded_line + "|")
         
         # Bottom margin and border
-        box_lines.append("║" + " " * inner_width + "║")
-        box_lines.append("╚" + "═" * width + "╝")
+        box_lines.append("|" + " " * inner_width + "|")
+        box_lines.append("+" + "-" * width + "+")
         
         return '\n'.join(box_lines)
 
@@ -487,24 +487,24 @@ def show_logo():
     """Display game logo screen"""
     os.system('clear' if os.name == 'posix' else 'cls')
     logo = """
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║                                                               ║
-    ║    ███████ ███    ██  █████  ██   ██ ███████     ██████       ║
-    ║    ██      ████   ██ ██   ██ ██  ██  ██         ██           ║
-    ║    ███████ ██ ██  ██ ███████ █████   █████      ██   ███     ║
-    ║         ██ ██  ██ ██ ██   ██ ██  ██  ██         ██    ██     ║
-    ║    ███████ ██   ████ ██   ██ ██   ██ ███████     ██████      ║
-    ║                                                               ║
-    ║                       CLASSIC SNAKE GAME                     ║
-    ║                                                               ║
-    ║                  Retro Arcade Game for Terminal               ║
-    ║                                                               ║
-    ╚═══════════════════════════════════════════════════════════════╝
+    +---------------------------------------------------------------+
+    |                                                               |
+    |    #######  ###    ##  #####  ##   ## #######     ######     |
+    |    ##       ####   ## ##   ## ##  ##  ##         ##         |
+    |    #######  ## ##  ## #######  #####   #####      ##   ###   |
+    |         ##  ##  ## ## ##   ## ##  ##  ##         ##    ##   |
+    |    #######  ##   #### ##   ## ##   ## #######     ######    |
+    |                                                               |
+    |                       CLASSIC SNAKE GAME                     |
+    |                                                               |
+    |                  Retro Arcade Game for Terminal               |
+    |                                                               |
+    +---------------------------------------------------------------+
     """
     print(logo)
-    print("\n" + "═" * 67)
+    print("\n" + "-" * 67)
     print("                     Press any key to start...")
-    print("═" * 67)
+    print("-" * 67)
     
     # Wait for key input
     try:
@@ -536,27 +536,27 @@ def show_how_to_play():
     """Game instructions"""
     os.system('clear' if os.name == 'posix' else 'cls')
     instructions = """
-╔═══════════════════════════════════════════════════════════════╗
-║                          HOW TO PLAY                          ║
-╠═══════════════════════════════════════════════════════════════╣
-║                                                               ║
-║  CONTROLS:                                                    ║
-║     ↑ ↓ ← →  Use arrow keys to control the snake             ║
-║     Q        Quit the game                                    ║
-║                                                               ║
-║  OBJECTIVE:                                                   ║
-║     @ Snake head (@)                                          ║
-║     o Snake body (o)                                          ║
-║     * Food (*) - eat to grow and increase score              ║
-║                                                               ║
-║  RULES:                                                       ║
-║     • Game ends if you hit the walls                         ║
-║     • Game ends if you hit your own body                     ║
-║     • Each food gives you 10 points                          ║
-║                                                               ║
-║  GOAL: Eat as much food as possible to achieve high score!   ║
-║                                                               ║
-╚═══════════════════════════════════════════════════════════════╝
++---------------------------------------------------------------+
+|                          HOW TO PLAY                          |
++---------------------------------------------------------------+
+|                                                               |
+|  CONTROLS:                                                    |
+|     ^ v < >  Use arrow keys to control the snake              |
+|     Q        Quit the game                                    |
+|                                                               |
+|  OBJECTIVE:                                                   |
+|     @ Snake head (@)                                          |
+|     o Snake body (o)                                          |
+|     * Food (*) - eat to grow and increase score               |
+|                                                               |
+|  RULES:                                                       |
+|     - Game ends if you hit the walls                          |
+|     - Game ends if you hit your own body                      |
+|     - Each food gives you 10 points                           |
+|                                                               |
+|  GOAL: Eat as much food as possible to achieve high score!    |
+|                                                               |
++---------------------------------------------------------------+
 """
     print(instructions)
     print("\nPress any key to return to main menu...")
@@ -590,23 +590,23 @@ def show_difficulty_menu(selected_index=0, terminal_adapter=None):
         {"name": "[4] Back to Main Menu", "details": []}
     ]
     
-    print("╔═══════════════════════════════════════════════════════════════╗")
-    print("║                      SELECT DIFFICULTY                        ║")
-    print("╠═══════════════════════════════════════════════════════════════╣")
-    print("║                                                               ║")
+    print("+---------------------------------------------------------------+")
+    print("|                      SELECT DIFFICULTY                        |")
+    print("+---------------------------------------------------------------+")
+    print("|                                                               |")
     
     for i, item in enumerate(difficulty_items):
         if i == selected_index:
-            print(f"║  > {item['name']}                                          ║"[:67] + "║")
+            print(f"|  > {item['name']}                                          |"[:67] + "|")
         else:
-            print(f"║    {item['name']}                                          ║"[:67] + "║")
+            print(f"|    {item['name']}                                          |"[:67] + "|")
             
         if item['details']:
             for detail in item['details']:
-                print(f"║      - {detail}                                   ║"[:67] + "║")
-            print("║                                                               ║")
+                print(f"|      - {detail}                                   |"[:67] + "|")
+            print("|                                                               |")
     
-    print("╚═══════════════════════════════════════════════════════════════╝")
+    print("+---------------------------------------------------------------+")
     print("\nUse arrow keys to select, Enter to confirm, Q to go back")
 
 def show_high_scores():
@@ -756,22 +756,22 @@ def main():
                     
                 elif selected_index == 4:  # Exit game
                     os.system('clear' if os.name == 'posix' else 'cls')
-                    print("╔═══════════════════════════════════════════════════════════════╗")
-                    print("║                          Exiting game                         ║")
-                    print("║                                                               ║")
-                    print("║                   Thanks for playing Snake!                   ║")
-                    print("║                                                               ║")
-                    print("╚═══════════════════════════════════════════════════════════════╝")
+                    print("+---------------------------------------------------------------+")
+                    print("|                          Exiting game                         |")
+                    print("|                                                               |")
+                    print("|                   Thanks for playing Snake!                   |")
+                    print("|                                                               |")
+                    print("+---------------------------------------------------------------+")
                     break
                     
             elif key == 'QUIT':  # Direct exit with Q key
                 os.system('clear' if os.name == 'posix' else 'cls')
-                print("╔═══════════════════════════════════════════════════════════════╗")
-                print("║                          Exiting game                         ║")
-                print("║                                                               ║")
-                print("║                   Thanks for playing Snake!                   ║")
-                print("║                                                               ║")
-                print("╚═══════════════════════════════════════════════════════════════╝")
+                print("+---------------------------------------------------------------+")
+                print("|                          Exiting game                         |")
+                print("|                                                               |")
+                print("|                   Thanks for playing Snake!                   |")
+                print("|                                                               |")
+                print("+---------------------------------------------------------------+")
                 break
                 
             elif key in ['1', '2', '3', '4', '5']:  # Existing number key support
@@ -809,12 +809,12 @@ def main():
                     
                 elif choice == 5:  # Exit game
                     os.system('clear' if os.name == 'posix' else 'cls')
-                    print("╔═══════════════════════════════════════════════════════════════╗")
-                    print("║                          Exiting game                         ║")
-                    print("║                                                               ║")
-                    print("║                   Thanks for playing Snake!                   ║")
-                    print("║                                                               ║")
-                    print("╚═══════════════════════════════════════════════════════════════╝")
+                    print("+---------------------------------------------------------------+")
+                    print("|                          Exiting game                         |")
+                    print("|                                                               |")
+                    print("|                   Thanks for playing Snake!                   |")
+                    print("|                                                               |")
+                    print("+---------------------------------------------------------------+")
                     break
             
         except KeyboardInterrupt:
