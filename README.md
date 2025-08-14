@@ -17,7 +17,7 @@ A classic snake game that runs in your terminal! Experience the nostalgic arcade
 
 ```bash
 # Add the tap (if available)
-brew tap your-username/snake-game
+brew tap movin-gun/snake
 
 # Install the game
 brew install snake-game-cli
@@ -33,8 +33,8 @@ pip install snake-game-cli
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/snake-game-cli.git
-cd snake-game-cli
+git clone https://github.com/movin-gun/snake.git
+cd snake
 
 # Install using pip
 pip install .
@@ -50,6 +50,9 @@ snake-game
 
 # Or use the short command
 snake
+
+# Or run directly from source
+python -m snake_game.game
 ```
 
 ### Game Controls
@@ -92,8 +95,8 @@ snake
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/snake-game-cli.git
-cd snake-game-cli
+git clone https://github.com/movin-gun/snake.git
+cd snake
 
 # Run directly
 python -m snake_game.game
@@ -106,14 +109,16 @@ snake-game
 ### Project Structure
 
 ```
-snake-game-cli/
+snake/
 ├── snake_game/
 │   ├── __init__.py
 │   └── game.py
+├── Formula/
+│   └── snake-game-cli.rb
 ├── setup.py
 ├── README.md
-└── Formula/
-    └── snake-game-cli.rb
+├── LICENSE
+└── MANIFEST.in
 ```
 
 ## 🐛 Troubleshooting
