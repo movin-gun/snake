@@ -127,9 +127,9 @@ class SnakeGame:
         
         # Difficulty settings with dynamic sizing
         base_difficulties = {
-            'easy': {'base_size': (20, 30), 'speed': 0.15},
-            'medium': {'base_size': (28, 40), 'speed': 0.1},
-            'hard': {'base_size': (35, 50), 'speed': 0.05}
+            'easy': {'base_size': (35, 30), 'speed': 0.15},
+            'medium': {'base_size': (45, 40), 'speed': 0.1},
+            'hard': {'base_size': (55, 50), 'speed': 0.05}
         }
         
         # Adjust board size to fit terminal
@@ -137,7 +137,7 @@ class SnakeGame:
         
         # Calculate maximum board size that fits in terminal
         max_width = min(self.term_width - 10, base_width)  # Leave margin for borders
-        max_height = min(self.term_height - 8, base_height + 10)  # Much more vertical space
+        max_height = min(self.term_height - 6, base_height + 15)  # Maximum vertical space
         
         # Ensure minimum size
         self.width = max(20, max_width)
