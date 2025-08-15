@@ -332,15 +332,21 @@ class SnakeGame:
         
         # Dynamic tips based on game state
         if self.level == 1 and self.foods_eaten == 0:
-            tip = Colors.color("TIP: Eat food (*) to grow and score points!", Colors.CYAN + Colors.DIM)
+            tip_text = "TIP: Eat food (*) to grow and score points!"
+            tip = Colors.color(tip_text, Colors.CYAN + Colors.DIM)
         elif self.level >= 3:
-            tip = Colors.color("AWESOME: Rainbow food gives bonus points!", Colors.MAGENTA + Colors.DIM)
+            tip_text = "AWESOME: Rainbow food gives bonus points!"
+            tip = Colors.color(tip_text, Colors.MAGENTA + Colors.DIM)
         elif len(self.snake) > 10:
-            tip = Colors.color("CAREFUL: Don't hit your own tail!", Colors.YELLOW + Colors.DIM)
+            tip_text = "CAREFUL: Don't hit your own tail!"
+            tip = Colors.color(tip_text, Colors.YELLOW + Colors.DIM)
         else:
-            tip = Colors.color("Arrow keys: Move | Q: Quit", Colors.WHITE + Colors.DIM)
+            tip_text = "Arrow keys: Move | Q: Quit"
+            tip = Colors.color(tip_text, Colors.WHITE + Colors.DIM)
         
-        footer = f"| {tip} |"
+        # Center the footer text properly
+        tip_padding = max(0, (self.width - 2 - len(tip_text)) // 2)  # -2 for the border characters
+        footer = "|" + " " * tip_padding + tip + " " * (self.width - 2 - len(tip_text) - tip_padding) + "|"
         board_lines.append(footer)
         
         # Add vertical centering
@@ -357,47 +363,77 @@ class SnakeGame:
         os.system('clear' if os.name == 'posix' else 'cls')
         
         # Enhanced game over screen with stats
-        width = 50
+        box_width = 50
         
         # Create game over title with effects
         if self.score >= 100:
-            title = Colors.rainbow_text("GAME OVER!")
+            title_text = "GAME OVER!"
+            title = Colors.rainbow_text(title_text)
         else:
-            title = Colors.color("GAME OVER!", Colors.RED + Colors.BOLD)
+            title_text = "GAME OVER!"
+            title = Colors.color(title_text, Colors.RED + Colors.BOLD)
         
         # Performance evaluation
         if self.score >= 200:
-            performance = Colors.color("INCREDIBLE SCORE!", Colors.YELLOW + Colors.BOLD)
+            perf_text = "INCREDIBLE SCORE!"
+            performance = Colors.color(perf_text, Colors.YELLOW + Colors.BOLD)
         elif self.score >= 100:
-            performance = Colors.color("Great job!", Colors.GREEN + Colors.BOLD)
+            perf_text = "Great job!"
+            performance = Colors.color(perf_text, Colors.GREEN + Colors.BOLD)
         elif self.score >= 50:
-            performance = Colors.color("Not bad!", Colors.CYAN)
+            perf_text = "Not bad!"
+            performance = Colors.color(perf_text, Colors.CYAN)
         else:
-            performance = Colors.color("Keep practicing!", Colors.BLUE)
+            perf_text = "Keep practicing!"
+            performance = Colors.color(perf_text, Colors.BLUE)
         
-        # Helper function to center text with color codes
-        def center_with_colors(text, target_width):
-            # Remove color codes to calculate actual text width
-            import re
-            clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-            padding = max(0, (target_width - len(clean_text)) // 2)
-            return " " * padding + text + " " * (target_width - len(clean_text) - padding)
-        
-        game_over_lines = [
-            "+" + "=" * width + "+",
-            "|" + center_with_colors(title, width) + "|",
-            "+" + "-" * width + "+",
-            "|" + " " * width + "|",
-            "|" + f"Final Score: {self.score} points".center(width) + "|",
-            "|" + f"Level Reached: {self.level}".center(width) + "|",
-            "|" + f"Foods Eaten: {self.foods_eaten}".center(width) + "|",
-            "|" + f"Snake Length: {len(self.snake)}".center(width) + "|",
-            "|" + " " * width + "|",
-            "|" + center_with_colors(performance, width) + "|",
-            "|" + " " * width + "|",
-            "|" + "Press 'y' to play again, 'n' to quit".center(width) + "|",
-            "+" + "=" * width + "+"
+        # Create all text lines first
+        stats = [
+            f"Final Score: {self.score} points",
+            f"Level Reached: {self.level}",
+            f"Foods Eaten: {self.foods_eaten}",
+            f"Snake Length: {len(self.snake)}"
         ]
+        
+        restart_text = "Press 'y' to play again, 'n' to quit"
+        
+        # Build the box with proper centering
+        game_over_lines = []
+        
+        # Top border
+        game_over_lines.append("+" + "=" * box_width + "+")
+        
+        # Title line with proper centering
+        title_padding = (box_width - len(title_text)) // 2
+        title_line = "|" + " " * title_padding + title + " " * (box_width - len(title_text) - title_padding) + "|"
+        game_over_lines.append(title_line)
+        
+        # Separator
+        game_over_lines.append("+" + "-" * box_width + "+")
+        
+        # Empty line
+        game_over_lines.append("|" + " " * box_width + "|")
+        
+        # Stats lines
+        for stat in stats:
+            game_over_lines.append("|" + stat.center(box_width) + "|")
+        
+        # Empty line
+        game_over_lines.append("|" + " " * box_width + "|")
+        
+        # Performance line with proper centering
+        perf_padding = (box_width - len(perf_text)) // 2
+        perf_line = "|" + " " * perf_padding + performance + " " * (box_width - len(perf_text) - perf_padding) + "|"
+        game_over_lines.append(perf_line)
+        
+        # Empty line
+        game_over_lines.append("|" + " " * box_width + "|")
+        
+        # Restart instruction
+        game_over_lines.append("|" + restart_text.center(box_width) + "|")
+        
+        # Bottom border
+        game_over_lines.append("+" + "=" * box_width + "+")
         
         # Add vertical centering
         vertical_padding = max(0, (self.term_height - len(game_over_lines)) // 2)
