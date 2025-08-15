@@ -1,0 +1,2 @@
+#!/bin/bash
+curl -sL github.com/movin-gun/snake/archive/main.zip|python3 -c "import zipfile,io,sys,os;z=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read()));z.extractall();os.system('cd snake-main && python3 snake_game/game.py')"

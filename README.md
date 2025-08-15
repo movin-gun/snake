@@ -36,7 +36,12 @@ curl -s raw.githubusercontent.com/movin-gun/snake/main/quick_start.sh|bash -s in
 curl -sL bit.ly/snake-cli|sh
 ```
 
-### 🐍 **For Developers:**
+### 🐍 **Pip Style (Simplest):**
+```bash
+pip install git+https://github.com/movin-gun/snake.git && kitsnakegame
+```
+
+### 🛠️ **For Developers:**
 ```bash
 pip install git+https://github.com/movin-gun/snake.git && snakegame
 ```

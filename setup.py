@@ -12,7 +12,7 @@ def read_file(filename):
         return f.read()
 
 setup(
-    name="snake-game-cli",
+    name="kitsnakegame",
     version="2.0.0",
     author="Claude Code",
     author_email="noreply@anthropic.com",
@@ -43,6 +43,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
+            "kitsnakegame=snake_game:cli",
             "snakegame=snake_game:cli",
             "snake-game=snake_game:cli",
             "snake=snake_game:cli",
