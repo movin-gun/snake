@@ -96,9 +96,24 @@ class SnakeGame:
         self.width = max(20, max_width)
         self.height = max(10, max_height)
         
-        self.speed = base_difficulties[difficulty]['speed']
+        self.base_speed = base_difficulties[difficulty]['speed']
         self.score = 0
         self.running = True
+        
+        # Detect terminal type for better speed compensation
+        self.terminal_type = self.detect_terminal_type()
+        
+        # Universal speed compensation for cross-platform compatibility
+        # Most terminals have character aspect ratio between 1.6:1 to 2.2:1 (height:width)
+        # Use conservative ratio that works well across different systems
+        horizontal_ratio = 0.7  # Make horizontal movement faster
+        
+        self.speed_ratios = {
+            Direction.UP: 1.0,              # Vertical movement (normal speed)
+            Direction.DOWN: 1.0,            # Vertical movement (normal speed)
+            Direction.LEFT: horizontal_ratio,   # Horizontal movement (compensated)
+            Direction.RIGHT: horizontal_ratio   # Horizontal movement (compensated)
+        }
         
         # Snake starts in center
         center_y, center_x = self.height // 2, self.width // 2
@@ -117,6 +132,22 @@ class SnakeGame:
         except (termios.error, OSError):
             self.old_settings = None
             self.terminal_mode = False
+
+    def detect_terminal_type(self):
+        """Detect terminal type for cross-platform compatibility"""
+        term_program = os.environ.get('TERM_PROGRAM', '').lower()
+        term = os.environ.get('TERM', '').lower()
+        
+        if 'iterm' in term_program:
+            return 'iterm2'
+        elif 'apple_terminal' in term_program:
+            return 'terminal'
+        elif 'vscode' in term_program:
+            return 'vscode'
+        elif 'screen' in term or 'tmux' in os.environ.get('TMUX', ''):
+            return 'generic'
+        else:
+            return 'generic'
 
     def generate_food(self):
         while True:
@@ -174,6 +205,10 @@ class SnakeGame:
             self.snake.pop()
         
         return True
+
+    def get_adjusted_speed(self):
+        """Get speed adjusted for current direction to compensate for terminal character ratio"""
+        return self.base_speed * self.speed_ratios[self.direction]
 
     def draw_board(self):
         os.system('clear' if os.name == 'posix' else 'cls')
@@ -257,7 +292,9 @@ class SnakeGame:
                 if not self.move_snake():
                     break
                 
-                time.sleep(self.speed)
+                # Use direction-adjusted speed
+                adjusted_speed = self.get_adjusted_speed()
+                time.sleep(adjusted_speed)
             
             self.game_over()
             
