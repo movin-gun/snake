@@ -10,6 +10,7 @@ import time
 import random
 import os
 import json
+import shutil
 from enum import Enum
 from datetime import datetime
 
@@ -33,18 +34,69 @@ class Direction(Enum):
     LEFT = (0, -1)
     RIGHT = (0, 1)
 
+class TerminalUtils:
+    @staticmethod
+    def get_terminal_size():
+        """Get terminal dimensions"""
+        try:
+            size = shutil.get_terminal_size()
+            return size.columns, size.lines
+        except:
+            return 80, 24
+    
+    @staticmethod
+    def center_text(text, width=None):
+        """Center text in terminal"""
+        if width is None:
+            width, _ = TerminalUtils.get_terminal_size()
+        lines = text.split('\n')
+        centered_lines = []
+        for line in lines:
+            # Remove ANSI color codes for length calculation
+            import re
+            clean_line = re.sub(r'\x1b\[[0-9;]*m', '', line)
+            padding = max(0, (width - len(clean_line)) // 2)
+            centered_lines.append(' ' * padding + line)
+        return '\n'.join(centered_lines)
+    
+    @staticmethod
+    def center_block(lines, width=None):
+        """Center a block of text lines"""
+        if width is None:
+            width, _ = TerminalUtils.get_terminal_size()
+        centered_lines = []
+        for line in lines:
+            # Remove ANSI color codes for length calculation
+            import re
+            clean_line = re.sub(r'\x1b\[[0-9;]*m', '', line)
+            padding = max(0, (width - len(clean_line)) // 2)
+            centered_lines.append(' ' * padding + line)
+        return centered_lines
+
 class SnakeGame:
     def __init__(self, difficulty='medium'):
-        # Difficulty settings
-        self.difficulties = {
-            'easy': {'size': (15, 30), 'speed': 0.15},
-            'medium': {'size': (20, 40), 'speed': 0.1},
-            'hard': {'size': (25, 50), 'speed': 0.05}
+        # Get terminal dimensions
+        self.term_width, self.term_height = TerminalUtils.get_terminal_size()
+        
+        # Difficulty settings with dynamic sizing
+        base_difficulties = {
+            'easy': {'base_size': (15, 30), 'speed': 0.15},
+            'medium': {'base_size': (20, 40), 'speed': 0.1},
+            'hard': {'base_size': (25, 50), 'speed': 0.05}
         }
         
-        self.difficulty = self.difficulties[difficulty]
-        self.height, self.width = self.difficulty['size']
-        self.speed = self.difficulty['speed']
+        # Adjust board size to fit terminal
+        base_height, base_width = base_difficulties[difficulty]['base_size']
+        
+        # Calculate maximum board size that fits in terminal
+        max_width = min(self.term_width - 10, base_width)  # Leave margin for borders
+        max_height = min(self.term_height - 15, base_height)  # Leave space for UI
+        
+        # Ensure minimum size
+        self.width = max(20, max_width)
+        self.height = max(10, max_height)
+        
+        self.speed = base_difficulties[difficulty]['speed']
         self.score = 0
         self.running = True
         
@@ -57,9 +109,14 @@ class SnakeGame:
         # Generate first food
         self.food = self.generate_food()
         
-        # Terminal setup
-        self.old_settings = termios.tcgetattr(sys.stdin)
-        tty.setcbreak(sys.stdin.fileno())
+        # Terminal setup (only if in actual terminal)
+        try:
+            self.old_settings = termios.tcgetattr(sys.stdin)
+            tty.setcbreak(sys.stdin.fileno())
+            self.terminal_mode = True
+        except (termios.error, OSError):
+            self.old_settings = None
+            self.terminal_mode = False
 
     def generate_food(self):
         while True:
@@ -121,11 +178,15 @@ class SnakeGame:
     def draw_board(self):
         os.system('clear' if os.name == 'posix' else 'cls')
         
+        # Create game board lines
+        board_lines = []
+        
         # Header
         score_text = Colors.color(f"Score: {self.score}", Colors.YELLOW + Colors.BOLD)
         quit_text = Colors.color("Quit: Q", Colors.RED)
-        print(f"| {score_text} | {quit_text} |")
-        print("+" + "=" * self.width + "+")
+        header = f"| {score_text} | {quit_text} |"
+        board_lines.append(header)
+        board_lines.append("+" + "=" * self.width + "+")
         
         # Game board
         for y in range(self.height):
@@ -142,24 +203,50 @@ class SnakeGame:
                 else:
                     row += " "
             row += "|"
-            print(row)
+            board_lines.append(row)
         
         # Footer
-        print("+" + "=" * self.width + "+")
-        print("| Arrow keys: Move | Q: Quit |")
+        board_lines.append("+" + "=" * self.width + "+")
+        footer = "| Arrow keys: Move | Q: Quit |"
+        board_lines.append(footer)
+        
+        # Add vertical centering
+        vertical_padding = max(0, (self.term_height - len(board_lines)) // 2 - 2)
+        for _ in range(vertical_padding):
+            print()
+        
+        # Center and print each line
+        for line in board_lines:
+            centered_line = TerminalUtils.center_text(line, self.term_width)
+            print(centered_line)
 
     def game_over(self):
         os.system('clear' if os.name == 'posix' else 'cls')
-        print("+" + "=" * 40 + "+")
-        print("|" + "GAME OVER!".center(40) + "|")
-        print("+" + "-" * 40 + "+")
-        print("|" + f"Final Score: {self.score} points".center(40) + "|")
-        print("|" + " " * 40 + "|")
-        print("|" + "Press 'y' to play again, 'n' to quit".center(40) + "|")
-        print("+" + "=" * 40 + "+")
+        
+        # Create game over screen
+        game_over_lines = [
+            "+" + "=" * 40 + "+",
+            "|" + "GAME OVER!".center(40) + "|",
+            "+" + "-" * 40 + "+",
+            "|" + f"Final Score: {self.score} points".center(40) + "|",
+            "|" + " " * 40 + "|",
+            "|" + "Press 'y' to play again, 'n' to quit".center(40) + "|",
+            "+" + "=" * 40 + "+"
+        ]
+        
+        # Add vertical centering
+        vertical_padding = max(0, (self.term_height - len(game_over_lines)) // 2)
+        for _ in range(vertical_padding):
+            print()
+        
+        # Center and print each line
+        for line in game_over_lines:
+            centered_line = TerminalUtils.center_text(line, self.term_width)
+            print(centered_line)
 
     def cleanup(self):
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
+        if self.old_settings is not None:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
 
     def run(self):
         try:
@@ -178,7 +265,9 @@ class SnakeGame:
             self.cleanup()
 
 def show_logo():
-    print("""
+    term_width, term_height = TerminalUtils.get_terminal_size()
+    
+    logo_text = """
 +===============================================+
 |                 SNAKE GAME                    |
 |              Terminal Edition                 |
@@ -189,19 +278,48 @@ def show_logo():
 |                                               |
 |  Arrow Keys: Move  |  Q: Quit                 |
 +===============================================+
-""")
+"""
+    
+    # Center the logo
+    centered_logo = TerminalUtils.center_text(logo_text, term_width)
+    
+    # Add vertical centering
+    logo_lines = logo_text.strip().split('\n')
+    vertical_padding = max(0, (term_height - len(logo_lines)) // 2 - 3)
+    
+    os.system('clear' if os.name == 'posix' else 'cls')
+    for _ in range(vertical_padding):
+        print()
+    
+    print(centered_logo)
 
 def select_difficulty():
     while True:
+        term_width, term_height = TerminalUtils.get_terminal_size()
         os.system('clear' if os.name == 'posix' else 'cls')
         show_logo()
-        print("\nSelect Difficulty:")
-        print("1. Easy   (15x30, Slow)")
-        print("2. Medium (20x40, Normal)")  
-        print("3. Hard   (25x50, Fast)")
-        print("4. Quit")
         
-        choice = input("\nChoice (1-4): ").strip()
+        # Create difficulty menu
+        menu_lines = [
+            "",
+            "Select Difficulty:",
+            "1. Easy   (Dynamic size, Slow)",
+            "2. Medium (Dynamic size, Normal)",  
+            "3. Hard   (Dynamic size, Fast)",
+            "4. Quit",
+            "",
+            "Choice (1-4): "
+        ]
+        
+        # Center the menu
+        for line in menu_lines[:-1]:  # All except the input prompt
+            centered_line = TerminalUtils.center_text(line, term_width)
+            print(centered_line)
+        
+        # Center the input prompt
+        prompt_line = menu_lines[-1]
+        prompt_padding = (term_width - len(prompt_line)) // 2
+        choice = input(' ' * prompt_padding + prompt_line).strip()
         
         if choice == '1':
             return 'easy'
@@ -212,7 +330,9 @@ def select_difficulty():
         elif choice == '4':
             return None
         else:
-            print("Invalid choice! Press Enter to try again...")
+            error_msg = "Invalid choice! Press Enter to try again..."
+            centered_error = TerminalUtils.center_text(error_msg, term_width)
+            print(centered_error)
             input()
 
 def main():
@@ -226,21 +346,34 @@ def main():
             game = SnakeGame(difficulty)
             game.run()
             
-            # Ask for restart
+            # Ask for restart with centered text
+            term_width, _ = TerminalUtils.get_terminal_size()
             while True:
-                restart = input("Play again? (y/n): ").strip().lower()
+                prompt = "Play again? (y/n): "
+                prompt_padding = (term_width - len(prompt)) // 2
+                restart = input(' ' * prompt_padding + prompt).strip().lower()
                 if restart in ['y', 'yes']:
                     break
                 elif restart in ['n', 'no']:
-                    print("Thanks for playing!")
+                    thanks_msg = "Thanks for playing!"
+                    centered_thanks = TerminalUtils.center_text(thanks_msg, term_width)
+                    print(centered_thanks)
                     return
                 else:
-                    print("Please enter 'y' or 'n'")
+                    error_msg = "Please enter 'y' or 'n'"
+                    centered_error = TerminalUtils.center_text(error_msg, term_width)
+                    print(centered_error)
                     
     except KeyboardInterrupt:
-        print("\nThanks for playing!")
+        term_width, _ = TerminalUtils.get_terminal_size()
+        thanks_msg = "\nThanks for playing!"
+        centered_thanks = TerminalUtils.center_text(thanks_msg, term_width)
+        print(centered_thanks)
     except Exception as e:
-        print(f"An error occurred: {e}")
+        term_width, _ = TerminalUtils.get_terminal_size()
+        error_msg = f"An error occurred: {e}"
+        centered_error = TerminalUtils.center_text(error_msg, term_width)
+        print(centered_error)
 
 if __name__ == "__main__":
     main()
