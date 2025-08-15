@@ -67,16 +67,17 @@ class TerminalUtils:
     
     @staticmethod
     def center_text(text, width=None):
-        """Center text in terminal"""
+        """Center text in terminal, properly handling ANSI color codes"""
         if width is None:
             width, _ = TerminalUtils.get_terminal_size()
         lines = text.split('\n')
         centered_lines = []
         for line in lines:
-            # Remove ANSI color codes for length calculation
+            # Remove ANSI color codes for accurate length calculation
             import re
             clean_line = re.sub(r'\x1b\[[0-9;]*m', '', line)
             padding = max(0, (width - len(clean_line)) // 2)
+            # Add padding only to the left, preserving the original line structure
             centered_lines.append(' ' * padding + line)
         return '\n'.join(centered_lines)
     
@@ -374,9 +375,17 @@ class SnakeGame:
         else:
             performance = Colors.color("Keep practicing!", Colors.BLUE)
         
+        # Helper function to center text with color codes
+        def center_with_colors(text, target_width):
+            # Remove color codes to calculate actual text width
+            import re
+            clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
+            padding = max(0, (target_width - len(clean_text)) // 2)
+            return " " * padding + text + " " * (target_width - len(clean_text) - padding)
+        
         game_over_lines = [
             "+" + "=" * width + "+",
-            "|" + title.center(width + 20) + "|",  # Extra space for color codes
+            "|" + center_with_colors(title, width) + "|",
             "+" + "-" * width + "+",
             "|" + " " * width + "|",
             "|" + f"Final Score: {self.score} points".center(width) + "|",
@@ -384,7 +393,7 @@ class SnakeGame:
             "|" + f"Foods Eaten: {self.foods_eaten}".center(width) + "|",
             "|" + f"Snake Length: {len(self.snake)}".center(width) + "|",
             "|" + " " * width + "|",
-            "|" + performance.center(width + 15) + "|",  # Extra space for color codes
+            "|" + center_with_colors(performance, width) + "|",
             "|" + " " * width + "|",
             "|" + "Press 'y' to play again, 'n' to quit".center(width) + "|",
             "+" + "=" * width + "+"
