@@ -137,7 +137,7 @@ class SnakeGame:
         
         # Calculate maximum board size that fits in terminal
         max_width = min(self.term_width - 10, base_width)  # Leave margin for borders
-        max_height = min(self.term_height - 15, base_height)  # Leave space for UI
+        max_height = min(self.term_height - 10, base_height + 5)  # Expand vertical space
         
         # Ensure minimum size
         self.width = max(20, max_width)
@@ -212,8 +212,9 @@ class SnakeGame:
         
         # Define safe zone boundaries (avoid too close to walls)
         wall_margin = 2
-        safe_top = wall_margin
-        safe_bottom = self.height - wall_margin - 1
+        vertical_margin = 1  # Reduced margin for top/bottom
+        safe_top = vertical_margin
+        safe_bottom = self.height - vertical_margin - 1
         safe_left = wall_margin  
         safe_right = self.width - wall_margin - 1
         
@@ -267,7 +268,8 @@ class SnakeGame:
         else:
             # Fallback - blocking input (not ideal but works)
             try:
-                return input()[:1] if input() else None
+                user_input = input()
+                return user_input[:1] if user_input else None
             except (EOFError, KeyboardInterrupt):
                 return None
 
