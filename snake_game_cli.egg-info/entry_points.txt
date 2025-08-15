@@ -1,4 +1,0 @@
-[console_scripts]
-snake = snake_game:cli
-snake-game = snake_game:cli
-snakegame = snake_game:cli
