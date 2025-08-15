@@ -10,6 +10,26 @@ import shutil
 from enum import Enum
 from datetime import datetime
 
+class Colors:
+    """Simple terminal color codes"""
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    
+    @staticmethod
+    def colorize(text, color):
+        """Add color to text if terminal supports it"""
+        try:
+            return f"{color}{text}{Colors.RESET}"
+        except:
+            return text
+
 class Direction(Enum):
     UP = (-1, 0)
     DOWN = (1, 0)
@@ -187,7 +207,7 @@ class UIBox:
         inner_width = width - 2  # Exclude left and right borders
         
         # Top border
-        box_lines.append("+" + "-" * width + "+")
+        box_lines.append("+" + "=" * width + "+")
         
         # Title
         if title:
@@ -208,9 +228,9 @@ class UIBox:
                     selected = line.get('selected', False)
                     
                     if selected:
-                        formatted_line = f"> {prefix}{text}"
+                        formatted_line = f">> {prefix}{text} <<"
                     else:
-                        formatted_line = f"  {prefix}{text}"
+                        formatted_line = f"   {prefix}{text}"
                     
                     padded_line = UIBox.pad_text(formatted_line, inner_width)
                     box_lines.append("|" + padded_line + "|")
@@ -224,7 +244,7 @@ class UIBox:
         
         # Bottom margin and border
         box_lines.append("|" + " " * inner_width + "|")
-        box_lines.append("+" + "-" * width + "+")
+        box_lines.append("+" + "=" * width + "+")
         
         return '\n'.join(box_lines)
 
@@ -400,26 +420,39 @@ def get_menu_input():
     def draw_board(self):
         os.system('clear' if os.name == 'posix' else 'cls')
         
-        print(f"Score: {self.score} | Difficulty: {self.difficulty['name']} | Quit: Q")
-        print("=" * (self.width + 2))
+        # Header with game info
+        score_text = Colors.colorize(f"Score: {self.score}", Colors.YELLOW + Colors.BOLD)
+        difficulty_text = Colors.colorize(f"Difficulty: {self.difficulty['name']}", Colors.CYAN)
+        quit_text = Colors.colorize("Quit: Q", Colors.RED)
+        header = f"{score_text} | {difficulty_text} | {quit_text}"
+        # Plain text for centering calculation
+        plain_header = f"Score: {self.score} | Difficulty: {self.difficulty['name']} | Quit: Q"
+        print("+" + "=" * (self.width + 2) + "+")
+        padding = (self.width - len(plain_header)) // 2
+        print(f"| {' ' * padding}{header}{' ' * (self.width - len(plain_header) - padding)} |")
+        print("+" + "=" * (self.width + 2) + "+")
         
         for y in range(self.height):
-            row = ""
+            row = "|"
             for x in range(self.width):
                 if y == 0 or y == self.height - 1 or x == 0 or x == self.width - 1:
-                    row += "#"
+                    row += Colors.colorize("#", Colors.WHITE)
                 elif (y, x) == self.snake[0]:  # head
-                    row += "@"
+                    row += Colors.colorize("@", Colors.GREEN + Colors.BOLD)
                 elif (y, x) in self.snake:  # body
-                    row += "o"
+                    row += Colors.colorize("o", Colors.GREEN)
                 elif (y, x) == self.food:  # food
-                    row += "*"
+                    row += Colors.colorize("*", Colors.RED + Colors.BOLD)
                 else:
                     row += " "
+            row += "|"
             print(row)
         
-        print("=" * (self.width + 2))
-        print("Arrow keys to move, Q to quit")
+        # Footer
+        print("+" + "=" * (self.width + 2) + "+")
+        controls = "Arrow keys to move, Q to quit"
+        print(f"| {controls.center(self.width)} |")
+        print("+" + "=" * (self.width + 2) + "+")
 
     def game_over(self, score_manager):
         os.system('clear' if os.name == 'posix' else 'cls')
@@ -431,21 +464,28 @@ def get_menu_input():
         score_manager.add_score(self.score, self.difficulty['name'])
         
         content = [
-            "GAME OVER!",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            "              G A M E   O V E R",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
             {"type": "separator"},
             f"Final Score: {self.score} points",
-            f"Difficulty: {self.difficulty['name']}",
+            f"Difficulty Level: {self.difficulty['name']}",
             {"type": "separator"}
         ]
         
         if is_high_score and self.score > 0:
             content.extend([
-                "*** NEW HIGH SCORE! ***",
+                "************************************************",
+                "          *** NEW HIGH SCORE! ***",
+                "     Congratulations on your achievement!",
+                "************************************************",
                 {"type": "separator"}
             ])
         
         content.extend([
-            "Press 'y' to restart, 'n' to return to menu"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            "  [Y] Play Again    [N] Return to Main Menu",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
         ])
         
         box = UIBox.create_box("", content)
@@ -487,24 +527,28 @@ def show_logo():
     """Display game logo screen"""
     os.system('clear' if os.name == 'posix' else 'cls')
     logo = """
-    +---------------------------------------------------------------+
+    +===============================================================+
     |                                                               |
-    |    #######  ###    ##  #####  ##   ## #######     ######     |
-    |    ##       ####   ## ##   ## ##  ##  ##         ##         |
-    |    #######  ## ##  ## #######  #####   #####      ##   ###   |
-    |         ##  ##  ## ## ##   ## ##  ##  ##         ##    ##   |
-    |    #######  ##   #### ##   ## ##   ## #######     ######    |
+    |   ____  _   _    _    _  __ _____    ____    _    __  __ _____  |
+    |  / ___|| \\ | |  / \\  | |/ /| ____|  / ___|  / \\  |  \\/  | ____| |
+    |  \\___ \\|  \\| | / _ \\ | ' / |  _|   | |  _  / _ \\ | |\\/| |  _|   |
+    |   ___) | |\\  |/ ___ \\| . \\ | |___  | |_| |/ ___ \\| |  | | |___  |
+    |  |____/|_| \\_/_/   \\_\\_|\\_\\|_____|  \\____/_/   \\_\\_|  |_|_____| |
     |                                                               |
-    |                       CLASSIC SNAKE GAME                     |
+    |  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  |
+    |                      CLASSIC RETRO ARCADE                     |
+    |                     Terminal Snake Adventure                   |
+    |  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  |
     |                                                               |
-    |                  Retro Arcade Game for Terminal               |
+    |     [@] Navigate with Arrow Keys    [*] Eat to Grow          |
+    |     [Q] Quit Game                   [Score] Beat Your Best!   |
     |                                                               |
-    +---------------------------------------------------------------+
+    +===============================================================+
     """
     print(logo)
-    print("\n" + "-" * 67)
-    print("                     Press any key to start...")
-    print("-" * 67)
+    print("\n" + "=" * 67)
+    print("                    [ Press any key to start ]")
+    print("=" * 67)
     
     # Wait for key input
     try:
@@ -536,27 +580,35 @@ def show_how_to_play():
     """Game instructions"""
     os.system('clear' if os.name == 'posix' else 'cls')
     instructions = """
-+---------------------------------------------------------------+
-|                          HOW TO PLAY                          |
-+---------------------------------------------------------------+
-|                                                               |
-|  CONTROLS:                                                    |
-|     ^ v < >  Use arrow keys to control the snake              |
-|     Q        Quit the game                                    |
-|                                                               |
-|  OBJECTIVE:                                                   |
-|     @ Snake head (@)                                          |
-|     o Snake body (o)                                          |
-|     * Food (*) - eat to grow and increase score               |
-|                                                               |
-|  RULES:                                                       |
-|     - Game ends if you hit the walls                          |
-|     - Game ends if you hit your own body                      |
-|     - Each food gives you 10 points                           |
-|                                                               |
-|  GOAL: Eat as much food as possible to achieve high score!    |
-|                                                               |
-+---------------------------------------------------------------+
++=================================================================+
+|                           HOW TO PLAY                          |
++-----------------------------------------------------------------+
+|                                                                 |
+|  CONTROLS:                                                      |
+|     [^] [v] [<] [>]  Use arrow keys to control the snake       |
+|     [Q]              Quit the game anytime                     |
+|                                                                 |
+|  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ |
+|                                                                 |
+|  GAME ELEMENTS:                                                 |
+|     [@] Snake head - This is you!                              |
+|     [o] Snake body - Your growing tail                         |
+|     [*] Food item  - Eat to grow and increase score            |
+|     [#] Wall       - Avoid hitting these!                      |
+|                                                                 |
+|  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ |
+|                                                                 |
+|  RULES:                                                         |
+|     * Game ends if you hit the walls                           |
+|     * Game ends if you hit your own body                       |
+|     * Each food gives you 10 points                            |
+|     * Snake grows longer with each food eaten                  |
+|                                                                 |
+|  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ |
+|                                                                 |
+|  GOAL: Eat as much food as possible to achieve high score!     |
+|                                                                 |
++=================================================================+
 """
     print(instructions)
     print("\nPress any key to return to main menu...")
@@ -590,23 +642,23 @@ def show_difficulty_menu(selected_index=0, terminal_adapter=None):
         {"name": "[4] Back to Main Menu", "details": []}
     ]
     
-    print("+---------------------------------------------------------------+")
-    print("|                      SELECT DIFFICULTY                        |")
-    print("+---------------------------------------------------------------+")
-    print("|                                                               |")
+    print("+=================================================================+")
+    print("|                        SELECT DIFFICULTY                      |")
+    print("+-----------------------------------------------------------------+")
+    print("|                                                                 |")
     
     for i, item in enumerate(difficulty_items):
         if i == selected_index:
-            print(f"|  > {item['name']}                                          |"[:67] + "|")
+            print(f"|  >> {item['name']} <<                                      |"[:69] + "|")
         else:
-            print(f"|    {item['name']}                                          |"[:67] + "|")
+            print(f"|     {item['name']}                                         |"[:69] + "|")
             
         if item['details']:
             for detail in item['details']:
-                print(f"|      - {detail}                                   |"[:67] + "|")
-            print("|                                                               |")
+                print(f"|        * {detail}                                 |"[:69] + "|")
+            print("|                                                                 |")
     
-    print("+---------------------------------------------------------------+")
+    print("+=================================================================+")
     print("\nUse arrow keys to select, Enter to confirm, Q to go back")
 
 def show_high_scores():
@@ -756,22 +808,30 @@ def main():
                     
                 elif selected_index == 4:  # Exit game
                     os.system('clear' if os.name == 'posix' else 'cls')
-                    print("+---------------------------------------------------------------+")
-                    print("|                          Exiting game                         |")
-                    print("|                                                               |")
-                    print("|                   Thanks for playing Snake!                   |")
-                    print("|                                                               |")
-                    print("+---------------------------------------------------------------+")
+                    print("+=================================================================+")
+                    print("|                           GOODBYE!                            |")
+                    print("+-----------------------------------------------------------------+")
+                    print("|                                                                 |")
+                    print("|                   Thanks for playing Snake!                    |")
+                    print("|                                                                 |")
+                    print("|               Hope you enjoyed the classic game                |")
+                    print("|                     Come back soon!                            |")
+                    print("|                                                                 |")
+                    print("+=================================================================+")
                     break
                     
             elif key == 'QUIT':  # Direct exit with Q key
                 os.system('clear' if os.name == 'posix' else 'cls')
-                print("+---------------------------------------------------------------+")
-                print("|                          Exiting game                         |")
-                print("|                                                               |")
-                print("|                   Thanks for playing Snake!                   |")
-                print("|                                                               |")
-                print("+---------------------------------------------------------------+")
+                print("+=================================================================+")
+                print("|                           GOODBYE!                            |")
+                print("+-----------------------------------------------------------------+")
+                print("|                                                                 |")
+                print("|                   Thanks for playing Snake!                    |")
+                print("|                                                                 |")
+                print("|               Hope you enjoyed the classic game                |")
+                print("|                     Come back soon!                            |")
+                print("|                                                                 |")
+                print("+=================================================================+")
                 break
                 
             elif key in ['1', '2', '3', '4', '5']:  # Existing number key support
@@ -809,12 +869,16 @@ def main():
                     
                 elif choice == 5:  # Exit game
                     os.system('clear' if os.name == 'posix' else 'cls')
-                    print("+---------------------------------------------------------------+")
-                    print("|                          Exiting game                         |")
-                    print("|                                                               |")
-                    print("|                   Thanks for playing Snake!                   |")
-                    print("|                                                               |")
-                    print("+---------------------------------------------------------------+")
+                    print("+=================================================================+")
+                    print("|                           GOODBYE!                            |")
+                    print("+-----------------------------------------------------------------+")
+                    print("|                                                                 |")
+                    print("|                   Thanks for playing Snake!                    |")
+                    print("|                                                                 |")
+                    print("|               Hope you enjoyed the classic game                |")
+                    print("|                     Come back soon!                            |")
+                    print("|                                                                 |")
+                    print("+=================================================================+")
                     break
             
         except KeyboardInterrupt:
