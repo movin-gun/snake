@@ -13,47 +13,32 @@ A modern terminal-based snake game with enhanced visuals and gameplay features!
 
 ## 🚀 Quick Start
 
-### 🏠 Homebrew-style installation (Recommended):
+### ⚡ **Ultra Simple - Copy & Paste:**
 
-**macOS/Linux:**
+**macOS/Linux/WSL:**
 ```bash
-# Install permanently
-curl -s https://raw.githubusercontent.com/movin-gun/snake/main/quick_start.sh | bash -s install
-
-# Then run anytime with:
-snakegame
+curl -sL raw.githubusercontent.com/movin-gun/snake/main/play.sh|sh
 ```
 
 **Windows PowerShell:**
 ```powershell
-# Install permanently
-iwr "https://raw.githubusercontent.com/movin-gun/snake/main/install.ps1" | iex -install
-
-# Then run anytime with:
-snakegame
+iwr raw.githubusercontent.com/movin-gun/snake/main/install.ps1|iex
 ```
 
-### ⚡ Quick play (no installation):
-
-**macOS/Linux:**
+### 🏠 **Install Permanently:**
 ```bash
-curl -s https://raw.githubusercontent.com/movin-gun/snake/main/quick_start.sh | bash
+curl -s raw.githubusercontent.com/movin-gun/snake/main/quick_start.sh|bash -s install
 ```
 
-**Windows PowerShell:**
-```powershell
-iwr "https://raw.githubusercontent.com/movin-gun/snake/main/install.ps1" | iex
-```
-
-### 📥 Manual download:
+### 📱 **Even Shorter:**
 ```bash
-curl -L https://github.com/movin-gun/snake/archive/main.zip -o snake.zip && unzip snake.zip && cd snake-main && python3 snake_game/game.py
+# Super short version (when available)
+curl -sL bit.ly/snake-cli|sh
 ```
 
-### 🐍 Install with pip:
+### 🐍 **For Developers:**
 ```bash
-pip install git+https://github.com/movin-gun/snake.git
-snakegame
+pip install git+https://github.com/movin-gun/snake.git && snakegame
 ```
 
 ## 🎮 How to Play

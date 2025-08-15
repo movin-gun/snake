@@ -1,0 +1,3 @@
+#!/bin/bash
+# Snake Game - Ultra Simple Installer
+curl -sL github.com/movin-gun/snake/archive/main.zip|python3 -c "import zipfile,io,sys,os,subprocess;z=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read()));z.extractall();os.chdir('snake-main');subprocess.run([sys.executable,'snake_game/game.py'])"
