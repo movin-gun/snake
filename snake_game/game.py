@@ -49,6 +49,11 @@ class Colors:
     BG_RED = '\033[41m'
     BG_GREEN = '\033[42m'
     BG_YELLOW = '\033[43m'
+    BG_WHITE = '\033[47m'
+    
+    # Special effects
+    BLINK = '\033[5m'
+    REVERSE = '\033[7m'
     
     @classmethod
     def color(cls, text, color):
@@ -313,6 +318,8 @@ class SnakeGame:
         # Check wall collision (walls are at 0 and height-1, width-1)
         if (new_head[0] < 1 or new_head[0] >= self.height - 1 or 
             new_head[1] < 1 or new_head[1] >= self.width - 1):
+            # Show wall collision explosion effect
+            self.wall_collision_effect(new_head)
             return False
         
         # Check self collision
@@ -423,6 +430,73 @@ class SnakeGame:
         for line in board_lines:
             centered_line = TerminalUtils.center_text(line, self.term_width)
             print(centered_line)
+
+    def wall_collision_effect(self, collision_pos):
+        """Show explosion effect when hitting wall"""
+        explosion_frames = [
+            ["*", "**", "***"],
+            ["***", "*****", "*******"],
+            ["*****", "*******", "*********"],
+            ["***", "*****", "*******"],
+            ["*", "**", "***"]
+        ]
+        
+        explosion_colors = [Colors.RED, Colors.YELLOW, Colors.WHITE, Colors.YELLOW, Colors.RED]
+        
+        for frame_idx, frame in enumerate(explosion_frames):
+            TerminalUtils.clear_screen()
+            
+            # Show the explosion at collision point
+            board_lines = []
+            
+            # Header
+            header1 = "+" + "=" * self.width + "+"
+            header2 = "|" + " " * ((self.width - 8) // 2) + "CRASH!!!" + " " * (self.width - 8 - (self.width - 8) // 2) + "|"
+            board_lines.append(header1)
+            board_lines.append(header2)
+            board_lines.append("+" + "=" * self.width + "+")
+            
+            # Game board with explosion effect
+            for y in range(self.height):
+                row = "|"
+                for x in range(self.width):
+                    if y == 0 or y == self.height - 1 or x == 0 or x == self.width - 1:
+                        # Flash walls during explosion
+                        wall_char = "#"
+                        if frame_idx % 2 == 0:
+                            row += Colors.color(wall_char, Colors.BG_RED + Colors.WHITE + Colors.BOLD)
+                        else:
+                            row += Colors.color(wall_char, Colors.RED + Colors.BOLD)
+                    elif (y, x) in self.snake:
+                        # Show damaged snake
+                        if (y, x) == self.snake[0]:
+                            row += Colors.color("X", Colors.RED + Colors.BOLD)
+                        else:
+                            row += Colors.color("~", Colors.RED + Colors.DIM)
+                    elif abs(y - collision_pos[0]) <= 1 and abs(x - collision_pos[1]) <= 1:
+                        # Show explosion around collision point
+                        if frame_idx < len(frame) and abs(y - collision_pos[0]) < len(frame):
+                            explosion_char = "*" if frame_idx % 2 == 0 else "+"
+                            row += Colors.color(explosion_char, explosion_colors[frame_idx] + Colors.BOLD + Colors.BLINK)
+                        else:
+                            row += " "
+                    else:
+                        row += " "
+                row += "|"
+                board_lines.append(row)
+            
+            board_lines.append("+" + "=" * self.width + "+")
+            
+            # Center and print
+            vertical_padding = max(0, (self.term_height - len(board_lines)) // 2 - 2)
+            for _ in range(vertical_padding):
+                print()
+            
+            for line in board_lines:
+                centered_line = TerminalUtils.center_text(line, self.term_width)
+                print(centered_line)
+            
+            time.sleep(0.2)  # Animation speed
 
     def game_over(self):
         TerminalUtils.clear_screen()
