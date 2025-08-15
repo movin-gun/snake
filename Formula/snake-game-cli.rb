@@ -1,8 +1,8 @@
 class SnakeGameCli < Formula
-  desc "A classic snake game for terminal/CLI"
+  desc "Simple and fun terminal snake game"
   homepage "https://github.com/movin-gun/snake"
   url "https://github.com/movin-gun/snake/archive/refs/heads/main.zip"
-  version "1.0.0"
+  version "2.0.0"
   sha256 :no_check
   license "MIT"
   
@@ -26,26 +26,23 @@ class SnakeGameCli < Formula
   
   def caveats
     <<~EOS
-      🐍 Snake Game CLI has been installed!
+      Snake Game CLI has been installed!
       
-      To start playing, use any of these commands:
-        snakegame    (recommended)
-        snake-game
-        snake
+      To start playing, run:
+        snakegame
       
       Game Controls:
-        ↑ ↓ ← →  Arrow keys to move
-        Q        Quit game
-        1-5      Navigate menus
+        Arrow keys  Move snake
+        Q           Quit game
+        1-3         Select difficulty
       
       Features:
-        • Beautiful ASCII logo screen
-        • Multiple difficulty levels
-        • Game instructions and high scores
-        • Korean/English interface
-        • Cross-platform support
+        - Simple and clean terminal interface
+        - 3 difficulty levels (Easy/Medium/Hard)
+        - Color support with graceful fallback
+        - Cross-platform compatibility
       
-      Have fun and try to beat your high score! 🏆
+      Have fun and beat your high score!
     EOS
   end
 end
