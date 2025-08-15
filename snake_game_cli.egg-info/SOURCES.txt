@@ -4,6 +4,8 @@ README.md
 setup.py
 snake_game/__init__.py
 snake_game/game.py
+snake_game/game_original.py
+snake_game/simple_game.py
 snake_game_cli.egg-info/PKG-INFO
 snake_game_cli.egg-info/SOURCES.txt
 snake_game_cli.egg-info/dependency_links.txt
