@@ -18,15 +18,36 @@ class Colors:
     """Terminal colors"""
     RESET = '\033[0m'
     BOLD = '\033[1m'
+    DIM = '\033[2m'
     RED = '\033[91m'
     GREEN = '\033[92m'
     YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
     CYAN = '\033[96m'
     WHITE = '\033[97m'
+    GRAY = '\033[90m'
+    
+    # Background colors for special effects
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_YELLOW = '\033[43m'
     
     @classmethod
     def color(cls, text, color):
         return f"{color}{text}{cls.RESET}"
+    
+    @classmethod
+    def rainbow_text(cls, text):
+        """Create rainbow effect for special occasions"""
+        colors = [cls.RED, cls.YELLOW, cls.GREEN, cls.CYAN, cls.BLUE, cls.MAGENTA]
+        result = ""
+        for i, char in enumerate(text):
+            if char != ' ':
+                result += colors[i % len(colors)] + char + cls.RESET
+            else:
+                result += char
+        return result
 
 class Direction(Enum):
     UP = (-1, 0)
@@ -99,6 +120,9 @@ class SnakeGame:
         self.base_speed = base_difficulties[difficulty]['speed']
         self.score = 0
         self.running = True
+        self.foods_eaten = 0
+        self.level = 1
+        self.last_score_milestone = 0
         
         # Detect terminal type for better speed compensation
         self.terminal_type = self.detect_terminal_type()
@@ -150,6 +174,40 @@ class SnakeGame:
             return 'generic'
 
     def generate_food(self):
+        """Generate food with improved positioning - avoid walls and snake body"""
+        attempts = 0
+        max_attempts = 100
+        
+        # Define safe zone boundaries (avoid too close to walls)
+        wall_margin = 2
+        safe_top = wall_margin
+        safe_bottom = self.height - wall_margin - 1
+        safe_left = wall_margin  
+        safe_right = self.width - wall_margin - 1
+        
+        while attempts < max_attempts:
+            # Try to place food in safe zone first
+            if attempts < max_attempts // 2:
+                food_y = random.randint(safe_top, safe_bottom)
+                food_x = random.randint(safe_left, safe_right)
+            else:
+                # Fallback to original method if safe zone fails
+                food_y = random.randint(1, self.height - 2)
+                food_x = random.randint(1, self.width - 2)
+            
+            food_pos = (food_y, food_x)
+            
+            # Check if position is valid (not in snake and not too close to snake head)
+            if food_pos not in self.snake:
+                # Additional check: not too close to snake head for better gameplay
+                head_y, head_x = self.snake[0]
+                distance = abs(food_y - head_y) + abs(food_x - head_x)
+                if distance >= 3:  # Manhattan distance of at least 3
+                    return food_pos
+            
+            attempts += 1
+        
+        # Emergency fallback - just avoid snake body
         while True:
             food_pos = (random.randint(1, self.height - 2), random.randint(1, self.width - 2))
             if food_pos not in self.snake:
@@ -199,7 +257,13 @@ class SnakeGame:
         
         # Check food
         if new_head == self.food:
-            self.score += 10
+            self.foods_eaten += 1
+            self.score += 10 + (self.level - 1) * 2  # Bonus points for higher levels
+            
+            # Level up every 5 foods
+            if self.foods_eaten % 5 == 0:
+                self.level += 1
+            
             self.food = self.generate_food()
         else:
             self.snake.pop()
@@ -216,33 +280,66 @@ class SnakeGame:
         # Create game board lines
         board_lines = []
         
-        # Header
+        # Enhanced header with more game info
         score_text = Colors.color(f"Score: {self.score}", Colors.YELLOW + Colors.BOLD)
-        quit_text = Colors.color("Quit: Q", Colors.RED)
-        header = f"| {score_text} | {quit_text} |"
-        board_lines.append(header)
+        level_text = Colors.color(f"Level: {self.level}", Colors.CYAN + Colors.BOLD)
+        foods_text = Colors.color(f"Foods: {self.foods_eaten}", Colors.GREEN)
+        length_text = Colors.color(f"Length: {len(self.snake)}", Colors.MAGENTA)
+        quit_text = Colors.color("Q: Quit", Colors.RED + Colors.DIM)
+        
+        # Create multi-line header
+        header1 = f"| {score_text} | {level_text} | {foods_text} |"
+        header2 = f"| {length_text} | {quit_text} |"
+        
+        board_lines.append(header1)
+        board_lines.append(header2)
         board_lines.append("+" + "=" * self.width + "+")
         
-        # Game board
+        # Game board with enhanced visuals
         for y in range(self.height):
             row = "|"
             for x in range(self.width):
                 if y == 0 or y == self.height - 1 or x == 0 or x == self.width - 1:
-                    row += Colors.color("#", Colors.WHITE)
-                elif (y, x) == self.snake[0]:  # head
-                    row += Colors.color("@", Colors.GREEN + Colors.BOLD)
-                elif (y, x) in self.snake:  # body
-                    row += Colors.color("o", Colors.GREEN)
-                elif (y, x) == self.food:  # food
-                    row += Colors.color("*", Colors.RED + Colors.BOLD)
+                    # Enhanced wall design
+                    if (y == 0 or y == self.height - 1) and (x == 0 or x == self.width - 1):
+                        row += Colors.color("+", Colors.WHITE + Colors.BOLD)  # Corners
+                    else:
+                        row += Colors.color("#", Colors.GRAY)  # Walls
+                elif (y, x) == self.snake[0]:  # Enhanced snake head
+                    if self.level >= 5:
+                        row += Colors.color("@", Colors.GREEN + Colors.BG_GREEN + Colors.BOLD)
+                    else:
+                        row += Colors.color("@", Colors.GREEN + Colors.BOLD)
+                elif (y, x) in self.snake:  # Enhanced snake body
+                    snake_index = self.snake.index((y, x))
+                    if snake_index < 3:  # First few segments are brighter
+                        row += Colors.color("o", Colors.GREEN + Colors.BOLD)
+                    else:
+                        row += Colors.color("o", Colors.GREEN)
+                elif (y, x) == self.food:  # Enhanced food with level-based effects
+                    if self.level >= 3:
+                        row += Colors.rainbow_text("*")  # Rainbow food at higher levels
+                    else:
+                        row += Colors.color("*", Colors.RED + Colors.BOLD)
                 else:
                     row += " "
             row += "|"
             board_lines.append(row)
         
-        # Footer
+        # Enhanced footer with tips
         board_lines.append("+" + "=" * self.width + "+")
-        footer = "| Arrow keys: Move | Q: Quit |"
+        
+        # Dynamic tips based on game state
+        if self.level == 1 and self.foods_eaten == 0:
+            tip = Colors.color("TIP: Eat food (*) to grow and score points!", Colors.CYAN + Colors.DIM)
+        elif self.level >= 3:
+            tip = Colors.color("AWESOME: Rainbow food gives bonus points!", Colors.MAGENTA + Colors.DIM)
+        elif len(self.snake) > 10:
+            tip = Colors.color("CAREFUL: Don't hit your own tail!", Colors.YELLOW + Colors.DIM)
+        else:
+            tip = Colors.color("Arrow keys: Move | Q: Quit", Colors.WHITE + Colors.DIM)
+        
+        footer = f"| {tip} |"
         board_lines.append(footer)
         
         # Add vertical centering
@@ -258,15 +355,39 @@ class SnakeGame:
     def game_over(self):
         os.system('clear' if os.name == 'posix' else 'cls')
         
-        # Create game over screen
+        # Enhanced game over screen with stats
+        width = 50
+        
+        # Create game over title with effects
+        if self.score >= 100:
+            title = Colors.rainbow_text("GAME OVER!")
+        else:
+            title = Colors.color("GAME OVER!", Colors.RED + Colors.BOLD)
+        
+        # Performance evaluation
+        if self.score >= 200:
+            performance = Colors.color("INCREDIBLE SCORE!", Colors.YELLOW + Colors.BOLD)
+        elif self.score >= 100:
+            performance = Colors.color("Great job!", Colors.GREEN + Colors.BOLD)
+        elif self.score >= 50:
+            performance = Colors.color("Not bad!", Colors.CYAN)
+        else:
+            performance = Colors.color("Keep practicing!", Colors.BLUE)
+        
         game_over_lines = [
-            "+" + "=" * 40 + "+",
-            "|" + "GAME OVER!".center(40) + "|",
-            "+" + "-" * 40 + "+",
-            "|" + f"Final Score: {self.score} points".center(40) + "|",
-            "|" + " " * 40 + "|",
-            "|" + "Press 'y' to play again, 'n' to quit".center(40) + "|",
-            "+" + "=" * 40 + "+"
+            "+" + "=" * width + "+",
+            "|" + title.center(width + 20) + "|",  # Extra space for color codes
+            "+" + "-" * width + "+",
+            "|" + " " * width + "|",
+            "|" + f"Final Score: {self.score} points".center(width) + "|",
+            "|" + f"Level Reached: {self.level}".center(width) + "|",
+            "|" + f"Foods Eaten: {self.foods_eaten}".center(width) + "|",
+            "|" + f"Snake Length: {len(self.snake)}".center(width) + "|",
+            "|" + " " * width + "|",
+            "|" + performance.center(width + 15) + "|",  # Extra space for color codes
+            "|" + " " * width + "|",
+            "|" + "Press 'y' to play again, 'n' to quit".center(width) + "|",
+            "+" + "=" * width + "+"
         ]
         
         # Add vertical centering
