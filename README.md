@@ -38,7 +38,7 @@ curl -sL bit.ly/snake-cli|sh
 
 ### 🐍 **Pip Style (Simplest):**
 ```bash
-pip install git+https://github.com/movin-gun/snake.git && kitsnakegame
+pip install git+https://github.com/movin-gun/snake.git && snakegame
 ```
 
 ### 🛠️ **For Developers:**
