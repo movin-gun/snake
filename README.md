@@ -53,8 +53,16 @@ snakegame
 ## 🛠️ Requirements
 
 - Python 3.7+
-- Terminal with ANSI color support
+- **Windows**: Command Prompt, PowerShell, or Windows Terminal
+- **macOS/Linux**: Any terminal with ANSI color support
 - No external dependencies needed!
+
+## 🖥️ Platform Support
+
+✅ **Windows 10/11**: Full support with native CMD/PowerShell  
+✅ **macOS**: Perfect compatibility with Terminal.app and iTerm2  
+✅ **Linux**: Works on all major distributions  
+✅ **WSL**: Windows Subsystem for Linux supported
 
 ## 📝 License
 

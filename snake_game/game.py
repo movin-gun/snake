@@ -4,15 +4,32 @@ Simple Snake Game for Terminal
 Simplified version with all core features intact
 """
 import sys
-import termios
-import tty
 import time
 import random
 import os
 import json
 import shutil
+import platform
 from enum import Enum
 from datetime import datetime
+
+# Platform-specific imports
+try:
+    import termios
+    import tty
+    UNIX_TERMINAL = True
+except ImportError:
+    UNIX_TERMINAL = False
+
+# Windows-specific imports
+if platform.system() == 'Windows':
+    try:
+        import msvcrt
+        WINDOWS_TERMINAL = True
+    except ImportError:
+        WINDOWS_TERMINAL = False
+else:
+    WINDOWS_TERMINAL = False
 
 class Colors:
     """Terminal colors"""
@@ -56,6 +73,14 @@ class Direction(Enum):
     RIGHT = (0, 1)
 
 class TerminalUtils:
+    @staticmethod
+    def clear_screen():
+        """Cross-platform screen clear"""
+        if platform.system() == 'Windows':
+            os.system('cls')
+        else:
+            os.system('clear')
+    
     @staticmethod
     def get_terminal_size():
         """Get terminal dimensions"""
@@ -149,14 +174,20 @@ class SnakeGame:
         # Generate first food
         self.food = self.generate_food()
         
-        # Terminal setup (only if in actual terminal)
-        try:
-            self.old_settings = termios.tcgetattr(sys.stdin)
-            tty.setcbreak(sys.stdin.fileno())
+        # Terminal setup (cross-platform)
+        self.old_settings = None
+        self.terminal_mode = False
+        
+        if UNIX_TERMINAL:
+            try:
+                self.old_settings = termios.tcgetattr(sys.stdin)
+                tty.setcbreak(sys.stdin.fileno())
+                self.terminal_mode = True
+            except (termios.error, OSError):
+                pass
+        elif WINDOWS_TERMINAL:
+            # Windows terminal is ready by default for getch
             self.terminal_mode = True
-        except (termios.error, OSError):
-            self.old_settings = None
-            self.terminal_mode = False
 
     def detect_terminal_type(self):
         """Detect terminal type for cross-platform compatibility"""
@@ -215,27 +246,59 @@ class SnakeGame:
                 return food_pos
 
     def get_key_press(self):
-        """Non-blocking key input"""
-        import select
-        if select.select([sys.stdin], [], [], 0.0)[0]:
-            return sys.stdin.read(1)
-        return None
+        """Cross-platform non-blocking key input"""
+        if WINDOWS_TERMINAL:
+            # Windows implementation
+            if msvcrt.kbhit():
+                key = msvcrt.getch()
+                if isinstance(key, bytes):
+                    key = key.decode('utf-8', errors='ignore')
+                return key
+            return None
+        elif UNIX_TERMINAL:
+            # Unix/Linux/macOS implementation
+            try:
+                import select
+                if select.select([sys.stdin], [], [], 0.0)[0]:
+                    return sys.stdin.read(1)
+            except ImportError:
+                pass
+            return None
+        else:
+            # Fallback - blocking input (not ideal but works)
+            try:
+                return input()[:1] if input() else None
+            except (EOFError, KeyboardInterrupt):
+                return None
 
     def handle_input(self):
         key = self.get_key_press()
         if key:
-            if key == '\x1b':  # ESC sequence
-                key2 = sys.stdin.read(1)
-                if key2 == '[':
-                    key3 = sys.stdin.read(1)
-                    if key3 == 'A' and self.direction != Direction.DOWN:
+            if WINDOWS_TERMINAL and len(key) == 1 and ord(key) == 224:
+                # Windows special key prefix
+                key2 = self.get_key_press()
+                if key2:
+                    if ord(key2) == 72 and self.direction != Direction.DOWN:  # Up arrow
                         self.next_direction = Direction.UP
-                    elif key3 == 'B' and self.direction != Direction.UP:
+                    elif ord(key2) == 80 and self.direction != Direction.UP:  # Down arrow
                         self.next_direction = Direction.DOWN
-                    elif key3 == 'C' and self.direction != Direction.LEFT:
+                    elif ord(key2) == 77 and self.direction != Direction.LEFT:  # Right arrow
                         self.next_direction = Direction.RIGHT
-                    elif key3 == 'D' and self.direction != Direction.RIGHT:
+                    elif ord(key2) == 75 and self.direction != Direction.RIGHT:  # Left arrow
                         self.next_direction = Direction.LEFT
+            elif key == '\x1b':  # ESC sequence (Unix/Mac)
+                if UNIX_TERMINAL:
+                    key2 = sys.stdin.read(1)
+                    if key2 == '[':
+                        key3 = sys.stdin.read(1)
+                        if key3 == 'A' and self.direction != Direction.DOWN:
+                            self.next_direction = Direction.UP
+                        elif key3 == 'B' and self.direction != Direction.UP:
+                            self.next_direction = Direction.DOWN
+                        elif key3 == 'C' and self.direction != Direction.LEFT:
+                            self.next_direction = Direction.RIGHT
+                        elif key3 == 'D' and self.direction != Direction.RIGHT:
+                            self.next_direction = Direction.LEFT
             elif key.lower() == 'q':
                 self.running = False
 
@@ -276,7 +339,7 @@ class SnakeGame:
         return self.base_speed * self.speed_ratios[self.direction]
 
     def draw_board(self):
-        os.system('clear' if os.name == 'posix' else 'cls')
+        TerminalUtils.clear_screen()
         
         # Create game board lines
         board_lines = []
@@ -360,7 +423,7 @@ class SnakeGame:
             print(centered_line)
 
     def game_over(self):
-        os.system('clear' if os.name == 'posix' else 'cls')
+        TerminalUtils.clear_screen()
         
         # Enhanced game over screen with stats
         box_width = 50
@@ -446,8 +509,13 @@ class SnakeGame:
             print(centered_line)
 
     def cleanup(self):
-        if self.old_settings is not None:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
+        """Cross-platform terminal cleanup"""
+        if UNIX_TERMINAL and self.old_settings is not None:
+            try:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
+            except:
+                pass
+        # Windows doesn't need special cleanup for msvcrt
 
     def run(self):
         try:
@@ -490,7 +558,7 @@ def show_logo():
     logo_lines = logo_text.strip().split('\n')
     vertical_padding = max(0, (term_height - len(logo_lines)) // 2 - 3)
     
-    os.system('clear' if os.name == 'posix' else 'cls')
+    TerminalUtils.clear_screen()
     for _ in range(vertical_padding):
         print()
     
@@ -499,7 +567,7 @@ def show_logo():
 def select_difficulty():
     while True:
         term_width, term_height = TerminalUtils.get_terminal_size()
-        os.system('clear' if os.name == 'posix' else 'cls')
+        TerminalUtils.clear_screen()
         show_logo()
         
         # Create difficulty menu
