@@ -13,7 +13,7 @@ def read_file(filename):
 
 setup(
     name="snake-game-cli",
-    version="1.0.0",
+    version="2.0.0",
     author="Claude Code",
     author_email="noreply@anthropic.com",
     description="A classic snake game for terminal/CLI",

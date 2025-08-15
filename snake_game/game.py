@@ -608,6 +608,13 @@ def select_difficulty():
 
 def main():
     """Main game loop"""
+    # Check for version flag
+    if len(sys.argv) > 1 and sys.argv[1] in ['--version', '-v']:
+        from . import __version__
+        print(f"Snake Game CLI v{__version__}")
+        print("A modern terminal-based snake game with enhanced features")
+        return
+    
     try:
         while True:
             difficulty = select_difficulty()
