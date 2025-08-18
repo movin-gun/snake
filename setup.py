@@ -14,12 +14,12 @@ def read_file(filename):
 setup(
     name="kitsnakegame",
     version="3.0.0",
-    author="Claude Code",
-    author_email="noreply@anthropic.com",
+    author="kit_lee",
+    author_email="kit_lee@example.com",
     description="A classic snake game for terminal/CLI",
     long_description="A classic snake game that runs in your terminal. Features multiple difficulty levels, intuitive controls, and a retro ASCII art interface.",
     long_description_content_type="text/plain",
-    url="https://github.com/anthropics/snake-game-cli",
+    url="https://github.com/movin-gun/snake",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -50,7 +50,7 @@ setup(
     },
     keywords=["game", "snake", "terminal", "cli", "arcade", "retro"],
     project_urls={
-        "Bug Reports": "https://github.com/anthropics/snake-game-cli/issues",
-        "Source": "https://github.com/anthropics/snake-game-cli",
+        "Bug Reports": "https://github.com/movin-gun/snake/issues",
+        "Source": "https://github.com/movin-gun/snake",
     },
 )

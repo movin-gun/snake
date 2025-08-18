@@ -10,7 +10,7 @@ A modern, cross-platform terminal-based snake game with advanced features:
 - Progressive difficulty system
 - Persistent high score tracking
 
-Author: Claude Code
+Author: kit_lee
 Version: 3.0.0
 """
 

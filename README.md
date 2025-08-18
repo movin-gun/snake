@@ -93,4 +93,4 @@ Have fun playing this classic game! Try to beat your high score and challenge yo
 
 ---
 
-Made with ❤️ by Claude Code
+Made with ❤️ by kit_lee
