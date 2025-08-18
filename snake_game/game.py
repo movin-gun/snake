@@ -173,38 +173,9 @@ class TerminalUtils:
     
     @staticmethod
     def get_terminal_character_ratio() -> float:
-        """Detect terminal character aspect ratio (width:height)"""
-        try:
-            term_type = os.environ.get('TERM', '').lower()
-            term_program = os.environ.get('TERM_PROGRAM', '').lower()
-            
-            # Terminal-specific character ratios
-            terminal_ratios = {
-                'iterm': 0.5,      # iTerm2
-                'terminal': 0.52,  # macOS Terminal
-                'xterm': 0.5,      # XTerm
-                'screen': 0.48,    # GNU Screen
-            }
-            
-            # Check terminal program first
-            for term, ratio in terminal_ratios.items():
-                if term in term_program:
-                    return ratio
-            
-            # Check terminal type
-            for term, ratio in terminal_ratios.items():
-                if term in term_type:
-                    return ratio
-            
-            # Windows specific
-            if platform.system() == 'Windows':
-                return 0.45
-            
-            # Default ratio
-            return 0.5
-            
-        except Exception:
-            return 0.5
+        """Simple character aspect ratio (width:height)"""
+        # Use a simple, universal ratio that works well across terminals
+        return 0.5
     
     @staticmethod
     def calculate_optimal_board_size(
@@ -213,29 +184,19 @@ class TerminalUtils:
         target_ratio_w: int = GameConfig.VISUAL_RATIO_WIDTH,
         target_ratio_h: int = GameConfig.VISUAL_RATIO_HEIGHT
     ) -> Tuple[int, int]:
-        """Calculate optimal board size for target visual ratio"""
+        """Calculate simple board size with good proportions"""
         
-        char_ratio = TerminalUtils.get_terminal_character_ratio()
-        
-        # Calculate available space
+        # Calculate available space with margins
         available_width = term_width - GameConfig.BOARD_MARGIN_WIDTH
         available_height = term_height - GameConfig.BOARD_MARGIN_HEIGHT
         
-        # Calculate ideal game board ratio for visual target
-        ideal_ratio = target_ratio_w / (target_ratio_h * char_ratio)
-        
-        # Try width-constrained approach
-        board_width = available_width
-        board_height = int(board_width / ideal_ratio)
-        
-        # Switch to height-constrained if needed
-        if board_height > available_height:
-            board_height = available_height
-            board_width = int(board_height * ideal_ratio)
+        # Use simple fixed proportions that work well
+        board_width = min(available_width, 50)  # Max width 50
+        board_height = min(available_height, int(board_width * 1.2))  # Height slightly larger
         
         # Apply constraints
-        board_width = max(GameConfig.MIN_BOARD_WIDTH, min(board_width, available_width))
-        board_height = max(GameConfig.MIN_BOARD_HEIGHT, min(board_height, available_height))
+        board_width = max(GameConfig.MIN_BOARD_WIDTH, board_width)
+        board_height = max(GameConfig.MIN_BOARD_HEIGHT, board_height)
         
         return board_width, board_height
     
