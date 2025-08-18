@@ -13,7 +13,7 @@ def read_file(filename):
 
 setup(
     name="kitsnakegame",
-    version="3.0.0",
+    version="3.0.1",
     author="kit_lee",
     author_email="kit_lee@example.com",
     description="A classic snake game for terminal/CLI",

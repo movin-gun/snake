@@ -11,7 +11,7 @@ A modern, cross-platform terminal-based snake game with advanced features:
 - Persistent high score tracking
 
 Author: kit_lee
-Version: 3.0.0
+Version: 3.0.1
 """
 
 import sys
@@ -207,23 +207,18 @@ class TerminalUtils:
     
     @staticmethod
     def center_text(text: str, width: Optional[int] = None) -> str:
-        """Center text in terminal, handling ANSI color codes"""
+        """Simple text centering without complex calculations"""
         if width is None:
             width, _ = TerminalUtils.get_terminal_size()
         
-        lines = text.split('\n')
-        centered_lines = []
-        
-        for line in lines:
-            clean_line = TerminalUtils.remove_ansi_codes(line)
-            padding = max(0, (width - len(clean_line)) // 2)
-            centered_lines.append(' ' * padding + line)
-        
-        return '\n'.join(centered_lines)
+        # Simple centering - just add some spaces
+        clean_text = TerminalUtils.remove_ansi_codes(text)
+        padding = max(0, (width - len(clean_text)) // 2)
+        return ' ' * padding + text
     
     @staticmethod
     def center_block(lines: List[str], width: Optional[int] = None) -> List[str]:
-        """Center a block of text lines"""
+        """Simple block centering"""
         if width is None:
             width, _ = TerminalUtils.get_terminal_size()
         
@@ -651,74 +646,29 @@ class SnakeGame:
         """Render the game board"""
         TerminalUtils.clear_screen()
         
-        board_lines = []
+        # Simple header
+        print(f"Score: {self.score} | Level: {self.level} | Foods: {self.foods_eaten}")
+        print("=" * self.width)
         
-        # Enhanced header with game info
-        score_text = f"Score: {self.score}"
-        level_text = f"Level: {self.level}"
-        high_score = self.score_manager.get_high_score(self.difficulty)
-        high_text = f"High: {high_score}"
-        
-        header_content = f"{score_text} | {level_text} | {high_text}"
-        header_padding = (self.width - len(header_content)) // 2
-        header1 = "|" + " " * header_padding + header_content + " " * (self.width - len(header_content) - header_padding) + "|"
-        
-        difficulty_text = f"Difficulty: {self.difficulty.upper()}"
-        foods_text = f"Foods: {self.foods_eaten}"
-        header2_content = f"{difficulty_text} | {foods_text}"
-        header2_padding = (self.width - len(header2_content)) // 2
-        header2 = "|" + " " * header2_padding + header2_content + " " * (self.width - len(header2_content) - header2_padding) + "|"
-        
-        board_lines.extend([
-            "+" + "=" * self.width + "+",
-            header1,
-            header2,
-            "+" + "=" * self.width + "+"
-        ])
-        
-        # Game board with enhanced visuals
+        # Simple game board
         for y in range(self.height):
-            row = "|"
+            row = ""
             for x in range(self.width):
                 if y == 0 or y == self.height - 1 or x == 0 or x == self.width - 1:
-                    # Enhanced walls
-                    if (y == 0 or y == self.height - 1) and (x == 0 or x == self.width - 1):
-                        row += Colors.color("+", Colors.WHITE + Colors.BOLD)  # Corners
-                    else:
-                        row += Colors.color("#", Colors.GRAY)  # Walls
+                    row += "#"  # Simple walls
                 elif (y, x) == self.snake[0]:
-                    # Enhanced snake head with level-based effects
-                    if self.level >= 5:
-                        row += Colors.color("@", Colors.GREEN + Colors.BOLD + Colors.BLINK)
-                    else:
-                        row += Colors.color("@", Colors.GREEN + Colors.BOLD)
+                    row += "@"  # Snake head
                 elif (y, x) in self.snake:
-                    # Snake body
-                    row += Colors.color("o", Colors.GREEN)
+                    row += "o"  # Snake body
                 elif (y, x) == self.food:
-                    # Enhanced food with level-based effects
-                    if self.level >= 3:
-                        row += Colors.rainbow_text("*")
-                    else:
-                        row += Colors.color("*", Colors.RED + Colors.BOLD)
+                    row += "*"  # Food
                 else:
                     row += " "
-            row += "|"
-            board_lines.append(row)
+            print(row)
         
-        # Enhanced footer with dynamic tips
-        board_lines.append("+" + "=" * self.width + "+")
-        
-        # Dynamic tips based on game state
-        tip_text = self._get_current_tip()
-        tip = Colors.color(tip_text, Colors.WHITE + Colors.DIM)
-        
-        tip_padding = max(0, (self.width - 2 - len(tip_text)) // 2)
-        footer = "|" + " " * tip_padding + tip + " " * (self.width - 2 - len(tip_text) - tip_padding) + "|"
-        board_lines.append(footer)
-        
-        # Display centered board
-        self._display_centered_board(board_lines)
+        # Simple footer
+        print("=" * self.width)
+        print("Arrow keys: Move | Q: Quit")
     
     def _get_current_tip(self) -> str:
         """Get contextual tip based on game state"""
@@ -859,47 +809,27 @@ class SnakeGame:
 # ================================
 
 def select_difficulty() -> Optional[str]:
-    """Display difficulty selection menu"""
+    """Display simple difficulty selection menu"""
     while True:
         TerminalUtils.clear_screen()
-        term_width, term_height = TerminalUtils.get_terminal_size()
         
-        # Enhanced menu design
-        menu_title = Colors.rainbow_text("🐍 SNAKE GAME 🐍")
-        subtitle = Colors.color("Enhanced Terminal Edition v3.0.0", Colors.CYAN + Colors.DIM)
-        
-        menu_lines = [
-            "+" + "=" * 50 + "+",
-            "|" + " " * ((50 - 17) // 2) + menu_title + " " * (50 - 17 - (50 - 17) // 2) + "|",
-            "|" + " " * ((50 - 32) // 2) + subtitle + " " * (50 - 32 - (50 - 32) // 2) + "|",
-            "|" + " " * 50 + "|",
-            "|" + " " * 15 + Colors.color("SELECT DIFFICULTY:", Colors.WHITE + Colors.BOLD) + " " * 18 + "|",
-            "|" + " " * 50 + "|",
-            "|  " + Colors.color("1. EASY", Colors.GREEN) + "   - Relaxed pace, smaller board" + " " * 7 + "|",
-            "|  " + Colors.color("2. MEDIUM", Colors.YELLOW) + " - Balanced challenge" + " " * 13 + "|", 
-            "|  " + Colors.color("3. HARD", Colors.RED) + "   - Fast and furious!" + " " * 12 + "|",
-            "|  " + Colors.color("4. QUIT", Colors.GRAY) + "   - Exit game" + " " * 18 + "|",
-            "|" + " " * 50 + "|",
-            "|" + " " * 10 + Colors.color("Enter your choice (1-4):", Colors.WHITE) + " " * 12 + "|",
-            "+" + "=" * 50 + "+"
-        ]
-        
-        # Center menu
-        centered_menu = TerminalUtils.center_block(menu_lines, term_width)
-        
-        vertical_padding = max(0, (term_height - len(centered_menu)) // 2 - 2)
-        for _ in range(vertical_padding):
-            print()
-        
-        for line in centered_menu:
-            print(line)
-        
-        # Get user input
-        prompt_line = "Enter your choice (1-4): "
-        prompt_padding = (term_width - len(prompt_line)) // 2
+        print()
+        print("=" * 40)
+        print("        SNAKE GAME v3.0.1")
+        print("=" * 40)
+        print()
+        print("SELECT DIFFICULTY:")
+        print()
+        print("1. EASY   - Relaxed pace")
+        print("2. MEDIUM - Balanced challenge")
+        print("3. HARD   - Fast and furious!")
+        print("4. QUIT   - Exit game")
+        print()
+        print("=" * 40)
+        print()
         
         try:
-            choice = input(' ' * prompt_padding + prompt_line).strip()
+            choice = input("Enter your choice (1-4): ").strip()
             
             difficulty_map = {
                 '1': 'easy',
@@ -911,9 +841,7 @@ def select_difficulty() -> Optional[str]:
             if choice in difficulty_map:
                 return difficulty_map[choice]
             else:
-                error_msg = "Invalid choice! Press Enter to try again..."
-                centered_error = TerminalUtils.center_text(error_msg, term_width)
-                print(centered_error)
+                print("Invalid choice! Press Enter to try again...")
                 input()
                 
         except (EOFError, KeyboardInterrupt):
