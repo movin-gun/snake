@@ -213,7 +213,7 @@ class SnakeGame:
         speed_settings = {
             'easy': 0.15,
             'medium': 0.1,
-            'hard': 0.05
+            'hard': 0.08
         }
         
         self.base_speed = speed_settings[difficulty]
@@ -636,9 +636,6 @@ class SnakeGame:
         # Empty line
         game_over_lines.append("|" + " " * box_width + "|")
         
-        # Restart instruction
-        game_over_lines.append("|" + restart_text.center(box_width) + "|")
-        
         # Bottom border
         game_over_lines.append("+" + "=" * box_width + "+")
         
@@ -651,6 +648,72 @@ class SnakeGame:
         for line in game_over_lines:
             centered_line = TerminalUtils.center_text(line, self.term_width)
             print(centered_line)
+            
+        # Add some space before the navigation menu
+        print()
+        print()
+        
+        # Now show the navigation menu
+        return self.show_game_over_menu()
+    
+    def show_game_over_menu(self):
+        """Show game over menu with arrow navigation and return True if play again"""
+        options = ['Play Again', 'Quit']
+        selected = 0
+        
+        # Setup terminal for arrow key input
+        old_settings = None
+        if UNIX_TERMINAL:
+            try:
+                old_settings = termios.tcgetattr(sys.stdin)
+                tty.setcbreak(sys.stdin.fileno())
+            except:
+                pass
+        
+        try:
+            while True:
+                # Clear just the menu area by moving cursor up and clearing lines
+                print("\033[6A", end="")  # Move cursor up 6 lines
+                for _ in range(6):
+                    print("\033[K")  # Clear line
+                
+                # Options
+                for i, option in enumerate(options):
+                    if i == selected:
+                        # Highlighted option
+                        line = Colors.color(f"> {option}", Colors.GREEN + Colors.BOLD)
+                    else:
+                        # Normal option
+                        line = f"  {option}"
+                    
+                    centered_line = TerminalUtils.center_text(line, self.term_width)
+                    print(centered_line)
+                
+                print()
+                instructions = "Use ↑↓ arrows to navigate, Enter to select, ESC to quit"
+                centered_instructions = TerminalUtils.center_text(instructions, self.term_width)
+                print(Colors.color(centered_instructions, Colors.GRAY))
+                
+                # Wait for key input
+                key = get_key_input()
+                if key == 'UP':
+                    selected = (selected - 1) % len(options)
+                elif key == 'DOWN':
+                    selected = (selected + 1) % len(options)
+                elif key == 'ENTER':
+                    return selected == 0  # True for Play Again, False for Quit
+                elif key == 'ESC' or key == 'q':
+                    return False  # Quit
+                
+                time.sleep(0.05)  # Prevent excessive CPU usage
+        
+        finally:
+            # Restore terminal settings
+            if UNIX_TERMINAL and old_settings:
+                try:
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                except:
+                    pass
 
     def cleanup(self):
         """Cross-platform terminal cleanup"""
@@ -673,8 +736,6 @@ class SnakeGame:
                 # Use direction-adjusted speed
                 adjusted_speed = self.get_adjusted_speed()
                 time.sleep(adjusted_speed)
-            
-            self.game_over()
             
         finally:
             self.cleanup()
@@ -708,47 +769,122 @@ def show_logo():
     
     print(centered_logo)
 
+def get_key_input():
+    """Get a single key input cross-platform"""
+    if WINDOWS_TERMINAL:
+        if msvcrt.kbhit():
+            key = msvcrt.getch()
+            if isinstance(key, bytes):
+                key = key.decode('utf-8', errors='ignore')
+            if len(key) == 1 and ord(key) == 224:  # Arrow key prefix
+                key2 = msvcrt.getch()
+                if isinstance(key2, bytes):
+                    key2 = key2.decode('utf-8', errors='ignore')
+                if ord(key2) == 72:
+                    return 'UP'
+                elif ord(key2) == 80:
+                    return 'DOWN'
+                elif ord(key2) == 13:  # Enter
+                    return 'ENTER'
+            elif ord(key) == 13:  # Enter
+                return 'ENTER'
+            elif ord(key) == 27:  # ESC
+                return 'ESC'
+            return key
+    elif UNIX_TERMINAL:
+        import select
+        if select.select([sys.stdin], [], [], 0.1)[0]:
+            key = sys.stdin.read(1)
+            if key == '\x1b':  # ESC sequence
+                if select.select([sys.stdin], [], [], 0.1)[0]:
+                    key += sys.stdin.read(1)  # [
+                    if key == '\x1b[' and select.select([sys.stdin], [], [], 0.1)[0]:
+                        key += sys.stdin.read(1)  # A/B/C/D
+                        if key == '\x1b[A':
+                            return 'UP'
+                        elif key == '\x1b[B':
+                            return 'DOWN'
+                return 'ESC'
+            elif key == '\n' or key == '\r':
+                return 'ENTER'
+            return key
+    return None
+
 def select_difficulty():
-    while True:
-        term_width, term_height = TerminalUtils.get_terminal_size()
-        TerminalUtils.clear_screen()
-        show_logo()
-        
-        # Create difficulty menu
-        menu_lines = [
-            "",
-            "Select Difficulty:",
-            "1. Easy   (Dynamic size, Slow)",
-            "2. Medium (Dynamic size, Normal)",  
-            "3. Hard   (Dynamic size, Fast)",
-            "4. Quit",
-            "",
-            "Choice (1-4): "
-        ]
-        
-        # Center the menu
-        for line in menu_lines[:-1]:  # All except the input prompt
-            centered_line = TerminalUtils.center_text(line, term_width)
-            print(centered_line)
-        
-        # Center the input prompt
-        prompt_line = menu_lines[-1]
-        prompt_padding = (term_width - len(prompt_line)) // 2
-        choice = input(' ' * prompt_padding + prompt_line).strip()
-        
-        if choice == '1':
-            return 'easy'
-        elif choice == '2':
-            return 'medium'
-        elif choice == '3':
-            return 'hard'
-        elif choice == '4':
-            return None
-        else:
-            error_msg = "Invalid choice! Press Enter to try again..."
-            centered_error = TerminalUtils.center_text(error_msg, term_width)
-            print(centered_error)
-            input()
+    menu_options = ['Easy', 'Medium', 'Hard', 'Quit']
+    descriptions = [
+        'Relaxed pace, perfect for beginners',
+        'Standard speed, good challenge',
+        'Fast-paced, for experienced players',
+        'Exit the game'
+    ]
+    selected = 0
+    
+    # Setup terminal for arrow key input
+    old_settings = None
+    if UNIX_TERMINAL:
+        try:
+            old_settings = termios.tcgetattr(sys.stdin)
+            tty.setcbreak(sys.stdin.fileno())
+        except:
+            pass
+    
+    try:
+        while True:
+            term_width, term_height = TerminalUtils.get_terminal_size()
+            TerminalUtils.clear_screen()
+            show_logo()
+            
+            # Title
+            title = "=== Select Difficulty ==="
+            centered_title = TerminalUtils.center_text(title, term_width)
+            print(centered_title)
+            print()
+            
+            # Menu options
+            for i, (option, desc) in enumerate(zip(menu_options, descriptions)):
+                if i == selected:
+                    # Highlighted option
+                    line = Colors.color(f"> {option}", Colors.GREEN + Colors.BOLD) + f" - {desc}"
+                else:
+                    # Normal option
+                    line = f"  {option} - {desc}"
+                
+                centered_line = TerminalUtils.center_text(line, term_width)
+                print(centered_line)
+            
+            print()
+            instructions = "Use ↑↓ arrows to navigate, Enter to select, ESC to quit"
+            centered_instructions = TerminalUtils.center_text(instructions, term_width)
+            print(Colors.color(centered_instructions, Colors.GRAY))
+            
+            # Wait for key input
+            key = get_key_input()
+            if key == 'UP':
+                selected = (selected - 1) % len(menu_options)
+            elif key == 'DOWN':
+                selected = (selected + 1) % len(menu_options)
+            elif key == 'ENTER':
+                if selected == 0:
+                    return 'easy'
+                elif selected == 1:
+                    return 'medium'
+                elif selected == 2:
+                    return 'hard'
+                elif selected == 3:
+                    return None
+            elif key == 'ESC' or key == 'q':
+                return None
+            
+            time.sleep(0.05)  # Prevent excessive CPU usage
+    
+    finally:
+        # Restore terminal settings
+        if UNIX_TERMINAL and old_settings:
+            try:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            except:
+                pass
 
 def main():
     """Main game loop"""
@@ -768,23 +904,13 @@ def main():
             game = SnakeGame(difficulty)
             game.run()
             
-            # Ask for restart with centered text
-            term_width, _ = TerminalUtils.get_terminal_size()
-            while True:
-                prompt = "Play again? (y/n): "
-                prompt_padding = (term_width - len(prompt)) // 2
-                restart = input(' ' * prompt_padding + prompt).strip().lower()
-                if restart in ['y', 'yes']:
-                    break
-                elif restart in ['n', 'no']:
-                    thanks_msg = "Thanks for playing!"
-                    centered_thanks = TerminalUtils.center_text(thanks_msg, term_width)
-                    print(centered_thanks)
-                    return
-                else:
-                    error_msg = "Please enter 'y' or 'n'"
-                    centered_error = TerminalUtils.center_text(error_msg, term_width)
-                    print(centered_error)
+            # The game_over method now returns True/False for play again
+            if not game.game_over():
+                term_width, _ = TerminalUtils.get_terminal_size()
+                thanks_msg = "Thanks for playing!"
+                centered_thanks = TerminalUtils.center_text(thanks_msg, term_width)
+                print(centered_thanks)
+                return
                     
     except KeyboardInterrupt:
         term_width, _ = TerminalUtils.get_terminal_size()
