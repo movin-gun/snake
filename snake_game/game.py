@@ -450,6 +450,13 @@ class SnakeGame:
                 key = msvcrt.getch()
                 if isinstance(key, bytes):
                     key = key.decode('utf-8', errors='ignore')
+                # Handle Windows arrow keys
+                if ord(key) == 224:  # Special key prefix
+                    key2 = msvcrt.getch()
+                    if isinstance(key2, bytes):
+                        key2 = key2.decode('utf-8', errors='ignore')
+                    arrow_map = {'H': 'UP', 'P': 'DOWN', 'K': 'LEFT', 'M': 'RIGHT'}
+                    return arrow_map.get(key2, key2)
                 return key
             return None
         
@@ -457,18 +464,22 @@ class SnakeGame:
             try:
                 import select
                 if select.select([sys.stdin], [], [], 0.0)[0]:
-                    return sys.stdin.read(1)
-            except ImportError:
+                    key = sys.stdin.read(1)
+                    # Handle escape sequences for arrow keys
+                    if key == '\x1b':  # ESC
+                        if select.select([sys.stdin], [], [], 0.1)[0]:
+                            key += sys.stdin.read(1)  # [
+                            if key == '\x1b[' and select.select([sys.stdin], [], [], 0.1)[0]:
+                                key += sys.stdin.read(1)  # A/B/C/D
+                                arrow_map = {'\x1b[A': 'UP', '\x1b[B': 'DOWN', '\x1b[C': 'RIGHT', '\x1b[D': 'LEFT'}
+                                return arrow_map.get(key, key)
+                    return key
+            except (ImportError, OSError):
                 pass
             return None
         
         else:
-            # Fallback for environments without proper terminal support
-            try:
-                user_input = input()
-                return user_input[:1] if user_input else None
-            except (EOFError, KeyboardInterrupt):
-                return None
+            return None
     
     def handle_input(self) -> None:
         """Process keyboard input"""
@@ -476,29 +487,13 @@ class SnakeGame:
         if not key:
             return
         
-        # Handle Windows special keys
-        if WINDOWS_TERMINAL and len(key) == 1 and ord(key) == 224:
-            key2 = self.get_key_press()
-            if key2:
-                arrow_keys = {
-                    'H': Direction.UP,    # Up arrow
-                    'P': Direction.DOWN,  # Down arrow
-                    'K': Direction.LEFT,  # Left arrow
-                    'M': Direction.RIGHT  # Right arrow
-                }
-                if key2 in arrow_keys:
-                    new_direction = arrow_keys[key2]
-                    if self._is_valid_direction_change(new_direction):
-                        self.next_direction = new_direction
-            return
-        
-        # Handle standard keys
+        # Simple key mappings
         key_mappings = {
-            # Arrow keys (ANSI escape sequences)
-            '\x1b[A': Direction.UP,
-            '\x1b[B': Direction.DOWN,
-            '\x1b[C': Direction.RIGHT,
-            '\x1b[D': Direction.LEFT,
+            # Arrow keys (converted by get_key_press)
+            'UP': Direction.UP,
+            'DOWN': Direction.DOWN,
+            'LEFT': Direction.LEFT,
+            'RIGHT': Direction.RIGHT,
             # WASD keys
             'w': Direction.UP,
             'W': Direction.UP,
@@ -508,15 +503,6 @@ class SnakeGame:
             'A': Direction.LEFT,
             'd': Direction.RIGHT,
             'D': Direction.RIGHT,
-            # Vim keys
-            'k': Direction.UP,
-            'K': Direction.UP,
-            'j': Direction.DOWN,
-            'J': Direction.DOWN,
-            'h': Direction.LEFT,
-            'H': Direction.LEFT,
-            'l': Direction.RIGHT,
-            'L': Direction.RIGHT,
         }
         
         if key in key_mappings:
@@ -646,16 +632,23 @@ class SnakeGame:
         """Render the game board"""
         TerminalUtils.clear_screen()
         
-        # Simple header
-        print(f"Score: {self.score} | Level: {self.level} | Foods: {self.foods_eaten}")
-        print("=" * self.width)
+        # Calculate center padding
+        center_padding = max(0, (self.term_width - self.width) // 2)
         
-        # Simple game board
+        # Header with centering
+        header = f"Score: {self.score} | Level: {self.level} | Foods: {self.foods_eaten}"
+        header_padding = max(0, (self.term_width - len(header)) // 2)
+        print(' ' * header_padding + header)
+        
+        border = "=" * self.width
+        print(' ' * center_padding + border)
+        
+        # Game board with centering
         for y in range(self.height):
             row = ""
             for x in range(self.width):
                 if y == 0 or y == self.height - 1 or x == 0 or x == self.width - 1:
-                    row += "#"  # Simple walls
+                    row += "#"  # Safe ASCII walls
                 elif (y, x) == self.snake[0]:
                     row += "@"  # Snake head
                 elif (y, x) in self.snake:
@@ -664,11 +657,13 @@ class SnakeGame:
                     row += "*"  # Food
                 else:
                     row += " "
-            print(row)
+            print(' ' * center_padding + row)
         
-        # Simple footer
-        print("=" * self.width)
-        print("Arrow keys: Move | Q: Quit")
+        # Footer with centering
+        print(' ' * center_padding + border)
+        footer = "Arrow keys: Move | Q: Quit"
+        footer_padding = max(0, (self.term_width - len(footer)) // 2)
+        print(' ' * footer_padding + footer)
     
     def _get_current_tip(self) -> str:
         """Get contextual tip based on game state"""
@@ -812,24 +807,43 @@ def select_difficulty() -> Optional[str]:
     """Display simple difficulty selection menu"""
     while True:
         TerminalUtils.clear_screen()
+        term_width, term_height = TerminalUtils.get_terminal_size()
         
-        print()
-        print("=" * 40)
-        print("        SNAKE GAME v3.0.1")
-        print("=" * 40)
-        print()
-        print("SELECT DIFFICULTY:")
-        print()
-        print("1. EASY   - Relaxed pace")
-        print("2. MEDIUM - Balanced challenge")
-        print("3. HARD   - Fast and furious!")
-        print("4. QUIT   - Exit game")
-        print()
-        print("=" * 40)
-        print()
+        # Center the menu
+        menu_lines = [
+            "",
+            "=" * 40,
+            "        SNAKE GAME v3.0.1",
+            "=" * 40,
+            "",
+            "SELECT DIFFICULTY:",
+            "",
+            "1. EASY   - Relaxed pace",
+            "2. MEDIUM - Balanced challenge", 
+            "3. HARD   - Fast and furious!",
+            "4. QUIT   - Exit game",
+            "",
+            "=" * 40,
+            ""
+        ]
+        
+        # Add vertical padding
+        vertical_padding = max(0, (term_height - len(menu_lines)) // 2 - 2)
+        for _ in range(vertical_padding):
+            print()
+        
+        # Print centered menu
+        for line in menu_lines:
+            if line.strip():  # Only center non-empty lines
+                padding = max(0, (term_width - len(line)) // 2)
+                print(' ' * padding + line)
+            else:
+                print()
         
         try:
-            choice = input("Enter your choice (1-4): ").strip()
+            prompt_text = "Enter your choice (1-4): "
+            prompt_padding = max(0, (term_width - len(prompt_text)) // 2)
+            choice = input(' ' * prompt_padding + prompt_text).strip()
             
             difficulty_map = {
                 '1': 'easy',
