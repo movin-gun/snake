@@ -1,46 +1,31 @@
 #!/usr/bin/env python3
-"""
-Setup script for Snake Game
-"""
-
-from setuptools import setup, find_packages
 import os
+import re
 
-# Read the README file
-def read_file(filename):
-    with open(os.path.join(os.path.dirname(__file__), filename), 'r', encoding='utf-8') as f:
+from setuptools import find_packages, setup
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def read(*parts):
+    with open(os.path.join(HERE, *parts), encoding="utf-8") as f:
         return f.read()
+
+
+# Single source of truth for the version: snake_game/__init__.py
+VERSION = re.search(r'^__version__ = "([^"]+)"', read("snake_game", "__init__.py"), re.M).group(1)
 
 setup(
     name="kitsnakegame",
-    version="2.1.1",
-    author="kit_lee",
-    author_email="kit_lee@example.com",
-    description="A classic snake game for terminal/CLI",
-    long_description="A classic snake game that runs in your terminal. Features multiple difficulty levels, intuitive controls, and a retro ASCII art interface.",
-    long_description_content_type="text/plain",
+    version=VERSION,
+    author="Kit Lee",
+    description="A classic snake game for the terminal - no dependencies",
+    long_description=read("README.md"),
+    long_description_content_type="text/markdown",
     url="https://github.com/movin-gun/snake",
-    packages=find_packages(),
-    classifiers=[
-        "Development Status :: 5 - Production/Stable",
-        "Environment :: Console",
-        "Intended Audience :: End Users/Desktop",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Topic :: Games/Entertainment :: Arcade",
-        "Topic :: Terminals",
-    ],
+    license="MIT",
+    packages=find_packages(exclude=["tests", "tests.*"]),
     python_requires=">=3.7",
-    install_requires=[
-        # No external dependencies - uses only Python standard library
-    ],
     entry_points={
         "console_scripts": [
             "snakegame=snake_game:cli",
@@ -48,6 +33,16 @@ setup(
             "snake=snake_game:cli",
         ],
     },
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Environment :: Console",
+        "Intended Audience :: End Users/Desktop",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3 :: Only",
+        "Topic :: Games/Entertainment :: Arcade",
+    ],
     keywords=["game", "snake", "terminal", "cli", "arcade", "retro"],
     project_urls={
         "Bug Reports": "https://github.com/movin-gun/snake/issues",

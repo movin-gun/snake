@@ -1,1 +1,0 @@
-curl -sL bit.ly/snake-cli|sh

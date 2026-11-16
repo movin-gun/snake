@@ -1,16 +1,19 @@
-#!/usr/bin/env python3
-"""
-Snake Game - A classic snake game for terminal/CLI
-"""
+"""Snake Game - a classic snake game for the terminal."""
 
-__version__ = "2.0.0"
-__author__ = "Kit_lee"
-__description__ = "A classic snake game playable in terminal/CLI"
+__version__ = "3.0.0"
+__author__ = "Kit Lee"
 
-from .game import main
 
 def cli():
-    """Entry point for command line interface"""
-    main()
+    """Console-script entry point."""
+    import sys
+    from .game import main
+    sys.exit(main())
 
-__all__ = ['cli', 'main']
+
+def main(argv=None):
+    from .game import main as _main
+    return _main(argv)
+
+
+__all__ = ["cli", "main", "__version__"]
