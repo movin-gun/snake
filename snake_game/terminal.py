@@ -2,7 +2,9 @@
 Cross-platform terminal handling: raw key input, ANSI output, sizing.
 """
 import os
+import re
 import shutil
+import struct
 import sys
 import time
 
@@ -10,6 +12,7 @@ if os.name == "nt":  # pragma: no cover - exercised on Windows CI only
     import msvcrt
     termios = tty = select = None
 else:
+    import fcntl
     import select
     import termios
     import tty
@@ -59,6 +62,21 @@ def parse_keys(data):
             keys.append(ch.lower())
         i += 1
     return keys
+
+
+def parse_pixel_reports(text, rows=0, cols=0):
+    """
+    Extract (char_width_px, char_height_px) from XTWINOPS replies:
+      ESC [ 6 ; height ; width t   (cell size)
+      ESC [ 4 ; height ; width t   (text area size, divided by rows/cols)
+    """
+    m = re.search(r"\x1b\[6;(\d+);(\d+)t", text)
+    if m and int(m.group(1)) > 0 and int(m.group(2)) > 0:
+        return int(m.group(2)), int(m.group(1))
+    m = re.search(r"\x1b\[4;(\d+);(\d+)t", text)
+    if m and rows and cols and int(m.group(1)) > 0 and int(m.group(2)) > 0:
+        return int(m.group(2)) / float(cols), int(m.group(1)) / float(rows)
+    return None
 
 
 # ------------------------------------------------------------------- ANSI out
@@ -156,6 +174,41 @@ class Terminal:
     def size():
         s = shutil.get_terminal_size((80, 24))
         return s.columns, s.lines
+
+    # -- geometry
+    def char_pixel_size(self, query=True):
+        """
+        (width, height) in pixels of one character cell, or None if the
+        terminal does not tell us. Tries the kernel window size first (free),
+        then asks the terminal with XTWINOPS escape queries.
+        """
+        if msvcrt is not None or self._fd is None:  # pragma: no cover
+            return None
+        try:
+            raw = fcntl.ioctl(self._fd, termios.TIOCGWINSZ, b"\0" * 8)
+            rows, cols, xpix, ypix = struct.unpack("HHHH", raw)
+            if rows and cols and xpix > 0 and ypix > 0:
+                return xpix / float(cols), ypix / float(rows)
+        except OSError:
+            rows = cols = 0
+        if not query:
+            return None
+        return self._query_pixel_size(rows, cols)
+
+    def _query_pixel_size(self, rows, cols, timeout=0.3):
+        # CSI 16 t -> cell size, CSI 14 t -> window size, CSI c (DA1) is
+        # answered by virtually every terminal and tells us when to stop waiting.
+        self.write("\x1b[16t\x1b[14t\x1b[c")
+        data = b""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([self._fd], [], [], deadline - time.monotonic())
+            if not ready:
+                break
+            data += os.read(self._fd, 1024)
+            if re.search(rb"\x1b\[\?[\d;]*c", data):
+                break
+        return parse_pixel_reports(data.decode("ascii", "ignore"), rows, cols)
 
     # -- input
     def read_keys(self, timeout):

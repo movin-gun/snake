@@ -88,6 +88,11 @@ class SnakeEngine:
         return self.body[0]
 
     @property
+    def next_direction(self):
+        """Direction the next step will take (first queued turn, if any)."""
+        return self._turns[0] if self._turns else self.direction
+
+    @property
     def interval(self):
         cfg = DIFFICULTIES[self.difficulty]
         value = cfg["interval"] * (cfg["accel"] ** (self.level - 1))

@@ -13,7 +13,7 @@ if __package__ in (None, ""):  # allow `python3 snake_game/game.py`
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     __package__ = "snake_game"
 
-from snake_game import __version__, scores
+from snake_game import __version__, display, scores, settings
 from snake_game.engine import DIFFICULTIES, Direction, SnakeEngine
 from snake_game.terminal import Terminal, colors_supported
 
@@ -51,24 +51,27 @@ class Style:
             return text
         return "\x1b[%sm%s\x1b[0m" % (";".join(str(c) for c in codes), text)
 
-    # cells are two characters wide so the board looks square
-    def cell(self, kind, tick=0):
+    # A board cell is `n` characters wide (see display.Geometry).
+    def cell(self, kind, n, tick=0):
+        blank = " " * n
         if not self.color:
-            return {"head": "@@", "body": "oo", "food": "<>", "dead": "XX",
-                    "dead_body": "xx"}.get(kind, "  ")
+            if kind in ("food", "food_rainbow"):
+                return {1: "*", 2: "<>"}.get(n, "<" + "*" * (n - 2) + ">")
+            ch = {"head": "@", "body": "o", "dead": "X", "dead_body": "x"}.get(kind)
+            return ch * n if ch else blank
         if kind == "head":
-            return "\x1b[102m  \x1b[0m"
+            return "\x1b[102m%s\x1b[0m" % blank
         if kind == "body":
-            return "\x1b[42m  \x1b[0m"
+            return "\x1b[42m%s\x1b[0m" % blank
         if kind == "food":
-            return "\x1b[101m  \x1b[0m"
+            return "\x1b[101m%s\x1b[0m" % blank
         if kind == "food_rainbow":
-            return "\x1b[%dm  \x1b[0m" % (101, 103, 105, 106)[tick % 4]
+            return "\x1b[%dm%s\x1b[0m" % ((101, 103, 105, 106)[tick % 4], blank)
         if kind == "dead":
-            return "\x1b[41;97;1mXX\x1b[0m"
+            return "\x1b[41;97;1m%s\x1b[0m" % ("X" * n)
         if kind == "dead_body":
-            return "\x1b[41m  \x1b[0m" if tick % 2 == 0 else "\x1b[100m  \x1b[0m"
-        return "  "
+            return ("\x1b[41m%s\x1b[0m" if tick % 2 == 0 else "\x1b[100m%s\x1b[0m") % blank
+        return blank
 
 
 def _unicode_ok():
@@ -82,9 +85,13 @@ def _unicode_ok():
 
 # ------------------------------------------------------------------- screens
 class App:
-    def __init__(self, term, style, difficulty=None):
+    def __init__(self, term, style, geometry, difficulty=None, detected_aspect=None,
+                 aspect_override=None):
         self.term = term
         self.st = style
+        self.geo = geometry
+        self.detected_aspect = detected_aspect
+        self.aspect_override = aspect_override
         self.preset_difficulty = difficulty
 
     # -- generic menu -------------------------------------------------------
@@ -155,18 +162,28 @@ class App:
         for name in DIFFICULTY_NAMES:
             b = best.get(name)
             labels.append("%-7s %s" % (name.capitalize(), ("best %d" % b) if b else ""))
+        labels.append("Display calibration")
         labels.append("Quit")
-        hotkeys = {str(i + 1): i for i in range(len(DIFFICULTY_NAMES))}
-        idx = self.menu(self.logo(), labels, DIFFICULTY_NAMES.index(current),
-                        footer="↑↓/1-3 select   Enter play   Q quit", hotkeys=hotkeys)
-        if idx is None or idx == len(DIFFICULTY_NAMES):
-            return None
-        return DIFFICULTY_NAMES[idx]
+        n = len(DIFFICULTY_NAMES)
+        hotkeys = {str(i + 1): i for i in range(n)}
+        hotkeys["c"] = n
+        selected = DIFFICULTY_NAMES.index(current)
+        while True:
+            idx = self.menu(self.logo(), labels, selected,
+                            footer="↑↓/1-3 select   Enter play   C calibrate   Q quit",
+                            hotkeys=hotkeys)
+            if idx == n:
+                self.calibrate()
+                selected = n
+                continue
+            if idx is None or idx > n:
+                return None
+            return DIFFICULTY_NAMES[idx]
 
     # -- the game -----------------------------------------------------------
     def board_size(self):
         tw, th = self.term.size()
-        w = min(MAX_BOARD[0], (tw - 2) // 2)
+        w = min(MAX_BOARD[0], (tw - 2) // self.geo.cell_chars)
         h = min(MAX_BOARD[1], th - 4)
         return w, h
 
@@ -177,7 +194,7 @@ class App:
             if w >= MIN_BOARD[0] and h >= MIN_BOARD[1]:
                 return True
             tw, th = self.term.size()
-            need = (MIN_BOARD[0] * 2 + 2, MIN_BOARD[1] + 4)
+            need = (MIN_BOARD[0] * self.geo.cell_chars + 2, MIN_BOARD[1] + 4)
             self.term.draw([
                 self.st("Terminal too small (%dx%d)." % (tw, th), 93, 1),
                 "Resize to at least %dx%d," % need,
@@ -200,10 +217,14 @@ class App:
         tick = 0
         last_size = self.term.size()
         self.render(game, best, tick, status="", clear=True)
-        next_tick = time.monotonic() + game.interval
+        last_step = time.monotonic()
 
         while game.alive:
-            timeout = 0.25 if (paused or too_small) else next_tick - time.monotonic()
+            # The wait before each move depends on the direction of that move,
+            # so on-screen speed is the same horizontally and vertically.
+            # Re-evaluated every pass, so a turn pressed mid-wait counts.
+            deadline = last_step + self.move_interval(game)
+            timeout = 0.25 if (paused or too_small) else deadline - time.monotonic()
             keys = self.term.read_keys(timeout)
             redraw = False
             for key in keys:
@@ -222,21 +243,23 @@ class App:
             clear = size != last_size
             if clear:
                 last_size = size
+                self.refresh_geometry()
                 bw, bh = self.board_size()
                 too_small = bw < game.width or bh < game.height
                 redraw = True
 
             now = time.monotonic()
+            deadline = last_step + self.move_interval(game)
             if paused or too_small:
-                next_tick = now + game.interval
-            elif now >= next_tick:
+                last_step = now
+            elif now >= deadline:
                 game.step()
                 tick += 1
                 if game.leveled_up:
                     banner_until = now + 1.5
-                # schedule from the previous deadline to avoid drift, but never
-                # try to "catch up" after a stall
-                next_tick = max(next_tick + game.interval, now + game.interval * 0.5)
+                # Anchor to the deadline (no drift) unless we fell well behind,
+                # in which case don't try to "catch up" with a burst of moves.
+                last_step = deadline if now - deadline < game.interval * 0.5 else now
                 redraw = True
 
             if redraw and game.alive:
@@ -253,6 +276,108 @@ class App:
         if game.death_cell is not None:
             self.death_animation(game, best)
         return game
+
+    def move_interval(self, game):
+        fh, fv = self.geo.move_factors()
+        vertical = game.next_direction in (Direction.UP, Direction.DOWN)
+        return game.interval * (fv if vertical else fh)
+
+    def refresh_geometry(self):
+        """Font zoom changes the pixel size; follow it when auto-detecting."""
+        if self.geo.source != "auto-detected":
+            return
+        px = self.term.char_pixel_size(query=False)
+        aspect = display.aspect_from_pixels(*px) if px else None
+        if aspect and abs(aspect - self.geo.char_aspect) > 0.02:
+            self.geo = display.Geometry(aspect, "auto-detected")
+
+    # -- calibration ----------------------------------------------------------
+    def calibrate(self):
+        """
+        Show a box that should look square and a dot running around it at
+        constant on-screen speed. ←/→ adjust until both look right.
+        """
+        st = self.st
+        aspect = self.geo.char_aspect
+        step_chars = 0.045          # seconds per one-character horizontal move
+        pos = 0
+        last_move = time.monotonic()
+        last_size = None
+        dirty = True
+        while True:
+            tw, th = self.term.size()
+            box_w = max(10, min(44, tw - 6))
+            box_h = max(4, int(round(box_w / aspect)))
+            box_h = min(box_h, max(4, th - 9))
+            path = ([(0, c) for c in range(box_w - 1)] +
+                    [(r, box_w - 1) for r in range(box_h - 1)] +
+                    [(box_h - 1, c) for c in range(box_w - 1, 0, -1)] +
+                    [(r, 0) for r in range(box_h - 1, 0, -1)])
+            pos %= len(path)
+
+            now = time.monotonic()
+            r0, c0 = path[pos]
+            r1, c1 = path[(pos + 1) % len(path)]
+            wait = step_chars * (aspect if r1 != r0 else 1.0)
+            if now - last_move >= wait:
+                pos = (pos + 1) % len(path)
+                last_move += wait if now - last_move < wait * 3 else now - last_move
+                dirty = True
+
+            if dirty or (tw, th) != last_size:
+                geo = display.Geometry(aspect, "preview")
+                text = [st("Display calibration", 96, 1), "",
+                        "Adjust until the box looks square and the dot",
+                        "moves at the same speed along every side.", ""]
+                box = []
+                marker = st("@", 93, 1) if st.color else "@"
+                tl, tr, bl, br, hz, vt = st.box
+                cur = path[pos]
+                left = " " * max(0, (tw - box_w) // 2)
+                for r in range(box_h):
+                    row = []
+                    for c in range(box_w):
+                        if (r, c) == cur:
+                            row.append(marker)
+                        elif r in (0, box_h - 1) or c in (0, box_w - 1):
+                            ch = (tl if (r, c) == (0, 0) else tr if (r, c) == (0, box_w - 1) else
+                                  bl if (r, c) == (box_h - 1, 0) else
+                                  br if (r, c) == (box_h - 1, box_w - 1) else
+                                  hz if r in (0, box_h - 1) else vt)
+                            row.append(st(ch, 90))
+                        else:
+                            row.append(" ")
+                    box.append(left + "".join(row))
+                info = ["", st("char ratio %.2f  ->  board cells %d char%s wide"
+                               % (aspect, geo.cell_chars, "" if geo.cell_chars == 1 else "s"), 93),
+                        st("←/→ adjust   R auto   Enter save   Esc cancel", 90)]
+                lines = [center(l, tw) for l in text] + box + [center(l, tw) for l in info]
+                pad = [""] * max(0, (th - len(lines)) // 2)
+                self.term.draw(pad + lines, clear=(tw, th) != last_size)
+                last_size, dirty = (tw, th), False
+
+            timeout = max(0.0, min(0.25, last_move + wait - time.monotonic()))
+            for key in self.term.read_keys(timeout):
+                if key in ("LEFT", "a", "h", "-"):
+                    aspect = display.clamp_aspect(aspect - 0.05)
+                    dirty = True
+                elif key in ("RIGHT", "d", "l", "+", "="):
+                    aspect = display.clamp_aspect(aspect + 0.05)
+                    dirty = True
+                elif key == "r":
+                    aspect = self.detected_aspect or display.DEFAULT_CHAR_ASPECT
+                    dirty = True
+                elif key == "ENTER":
+                    auto = self.detected_aspect or display.DEFAULT_CHAR_ASPECT
+                    if abs(aspect - auto) < 0.025:
+                        settings.set_char_aspect(None)
+                    else:
+                        settings.set_char_aspect(aspect)
+                    self.geo = display.resolve(self.detected_aspect, settings.saved_char_aspect(),
+                                               self.aspect_override)
+                    return
+                elif key in ("ESC", "q"):
+                    return
 
     def death_animation(self, game, best):
         for frame in range(6):
@@ -271,7 +396,8 @@ class App:
             return
         tl, tr, bl, br, hz, vt = st.box
 
-        board_w = game.width * 2 + 2
+        n = self.geo.cell_chars
+        board_w = game.width * n + 2
         left = " " * max(0, (tw - board_w) // 2)
         top = max(0, (th - (game.height + 4)) // 2)
 
@@ -295,15 +421,15 @@ class App:
             for c in range(game.width):
                 cell = (r, c)
                 if dead and cell == head:
-                    row.append(st.cell("dead"))
+                    row.append(st.cell("dead", n))
                 elif cell == head:
-                    row.append(st.cell("head"))
+                    row.append(st.cell("head", n))
                 elif cell in game.occupied:
-                    row.append(st.cell("dead_body" if dead else "body", tick))
+                    row.append(st.cell("dead_body" if dead else "body", n, tick))
                 elif cell == game.food:
-                    row.append(st.cell(food_kind, tick))
+                    row.append(st.cell(food_kind, n, tick))
                 else:
-                    row.append("  ")
+                    row.append(" " * n)
             row.append(wall)
             lines.append("".join(row))
         lines.append(left + st(bl + hz * (board_w - 2) + br, 90))
@@ -370,6 +496,10 @@ def parse_args(argv):
                    help="skip the menu and start at this difficulty")
     p.add_argument("--no-color", action="store_true", help="plain ASCII rendering")
     p.add_argument("--scores", action="store_true", help="print best scores and exit")
+    p.add_argument("--calibrate", action="store_true",
+                   help="open the display calibration screen first")
+    p.add_argument("--aspect", type=float, metavar="RATIO",
+                   help="character height/width ratio of your font (default: auto-detect)")
     return p.parse_args(argv)
 
 
@@ -386,7 +516,13 @@ def main(argv=None):
     style = Style(color=colors_supported() and not args.no_color, unicode_ok=_unicode_ok())
     try:
         with Terminal() as term:
-            App(term, style, args.difficulty).run()
+            px = term.char_pixel_size()
+            detected = display.aspect_from_pixels(*px) if px else None
+            geo = display.resolve(detected, settings.saved_char_aspect(), args.aspect)
+            app = App(term, style, geo, args.difficulty, detected, args.aspect)
+            if args.calibrate:
+                app.calibrate()
+            app.run()
     except KeyboardInterrupt:
         pass
     print("Thanks for playing!")
