@@ -1,927 +1,533 @@
 #!/usr/bin/env python3
 """
-Simple Snake Game for Terminal
-Simplified version with all core features intact
+Snake for the terminal: menus, rendering and the main loop.
+Game rules live in engine.py; terminal plumbing lives in terminal.py.
 """
+import argparse
+import re
 import sys
 import time
-import random
-import os
-import json
-import shutil
-import platform
-from enum import Enum
-from datetime import datetime
 
-# Platform-specific imports
-try:
-    import termios
-    import tty
-    UNIX_TERMINAL = True
-except ImportError:
-    UNIX_TERMINAL = False
+if __package__ in (None, ""):  # allow `python3 snake_game/game.py`
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    __package__ = "snake_game"
 
-# Windows-specific imports
-if platform.system() == 'Windows':
+from snake_game import __version__, display, scores, settings
+from snake_game.engine import DIFFICULTIES, Direction, SnakeEngine
+from snake_game.terminal import Terminal, colors_supported
+
+MAX_BOARD = (28, 18)   # cells (width, height)
+MIN_BOARD = (12, 8)
+DIFFICULTY_NAMES = list(DIFFICULTIES)
+
+KEY_TO_DIRECTION = {
+    "UP": Direction.UP, "DOWN": Direction.DOWN,
+    "LEFT": Direction.LEFT, "RIGHT": Direction.RIGHT,
+    "w": Direction.UP, "s": Direction.DOWN, "a": Direction.LEFT, "d": Direction.RIGHT,
+    "k": Direction.UP, "j": Direction.DOWN, "h": Direction.LEFT, "l": Direction.RIGHT,
+}
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
+def visible_len(text):
+    return len(_ANSI_RE.sub("", text))
+
+
+def center(text, width):
+    return " " * max(0, (width - visible_len(text)) // 2) + text
+
+
+# ----------------------------------------------------------------------- look
+class Style:
+    def __init__(self, color=True, unicode_ok=True):
+        self.color = color
+        self.box = ("╭", "╮", "╰", "╯", "─", "│") if unicode_ok else ("+", "+", "+", "+", "-", "|")
+        self.dot = "·" if unicode_ok else "-"
+
+    def __call__(self, text, *codes):
+        if not self.color or not codes:
+            return text
+        return "\x1b[%sm%s\x1b[0m" % (";".join(str(c) for c in codes), text)
+
+    # A board cell is `n` characters wide (see display.Geometry).
+    def cell(self, kind, n, tick=0):
+        blank = " " * n
+        if not self.color:
+            if kind in ("food", "food_rainbow"):
+                return {1: "*", 2: "<>"}.get(n, "<" + "*" * (n - 2) + ">")
+            ch = {"head": "@", "body": "o", "dead": "X", "dead_body": "x"}.get(kind)
+            return ch * n if ch else blank
+        if kind == "head":
+            return "\x1b[102m%s\x1b[0m" % blank
+        if kind == "body":
+            return "\x1b[42m%s\x1b[0m" % blank
+        if kind == "food":
+            return "\x1b[101m%s\x1b[0m" % blank
+        if kind == "food_rainbow":
+            return "\x1b[%dm%s\x1b[0m" % ((101, 103, 105, 106)[tick % 4], blank)
+        if kind == "dead":
+            return "\x1b[41;97;1m%s\x1b[0m" % ("X" * n)
+        if kind == "dead_body":
+            return ("\x1b[41m%s\x1b[0m" if tick % 2 == 0 else "\x1b[100m%s\x1b[0m") % blank
+        return blank
+
+
+def _unicode_ok():
+    enc = (getattr(sys.stdout, "encoding", None) or "").lower()
     try:
-        import msvcrt
-        WINDOWS_TERMINAL = True
-    except ImportError:
-        WINDOWS_TERMINAL = False
-else:
-    WINDOWS_TERMINAL = False
-
-class Colors:
-    """Terminal colors"""
-    RESET = '\033[0m'
-    BOLD = '\033[1m'
-    DIM = '\033[2m'
-    RED = '\033[91m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    MAGENTA = '\033[95m'
-    CYAN = '\033[96m'
-    WHITE = '\033[97m'
-    GRAY = '\033[90m'
-    
-    # Background colors for special effects
-    BG_RED = '\033[41m'
-    BG_GREEN = '\033[42m'
-    BG_YELLOW = '\033[43m'
-    BG_WHITE = '\033[47m'
-    
-    # Special effects
-    BLINK = '\033[5m'
-    REVERSE = '\033[7m'
-    
-    @classmethod
-    def color(cls, text, color):
-        return f"{color}{text}{cls.RESET}"
-    
-    @classmethod
-    def rainbow_text(cls, text):
-        """Create rainbow effect for special occasions"""
-        colors = [cls.RED, cls.YELLOW, cls.GREEN, cls.CYAN, cls.BLUE, cls.MAGENTA]
-        result = ""
-        for i, char in enumerate(text):
-            if char != ' ':
-                result += colors[i % len(colors)] + char + cls.RESET
-            else:
-                result += char
-        return result
-
-class Direction(Enum):
-    UP = (-1, 0)
-    DOWN = (1, 0)
-    LEFT = (0, -1)
-    RIGHT = (0, 1)
-
-class TerminalUtils:
-    @staticmethod
-    def clear_screen():
-        """Cross-platform screen clear"""
-        if platform.system() == 'Windows':
-            os.system('cls')
-        else:
-            os.system('clear')
-    
-    @staticmethod
-    def get_terminal_size():
-        """Get terminal dimensions"""
-        try:
-            size = shutil.get_terminal_size()
-            return size.columns, size.lines
-        except:
-            return 80, 24
-    
-    @staticmethod
-    def get_terminal_character_ratio():
-        """Detect terminal character aspect ratio (width:height)"""
-        try:
-            # Try to detect terminal type and character spacing
-            term_type = os.environ.get('TERM', '').lower()
-            term_program = os.environ.get('TERM_PROGRAM', '').lower()
-            
-            # Terminal-specific character ratios (character width:height)
-            if 'iterm' in term_program:
-                return 0.5  # iTerm2 typical ratio
-            elif 'terminal' in term_program:  # macOS Terminal
-                return 0.52
-            elif 'xterm' in term_type:
-                return 0.5
-            elif 'screen' in term_type:
-                return 0.48
-            elif platform.system() == 'Windows':
-                # Windows Command Prompt/PowerShell
-                return 0.45
-            else:
-                # Default for most terminals
-                return 0.5
-        except:
-            return 0.5  # Safe default
-    
-    @staticmethod
-    def calculate_optimal_board_size(term_width, term_height, target_ratio_w=4, target_ratio_h=5):
-        """Calculate optimal board size for 4:5 visual ratio"""
-        char_ratio = TerminalUtils.get_terminal_character_ratio()
-        
-        # Calculate available space
-        available_width = term_width - 10  # Leave margin
-        available_height = term_height - 8  # Leave space for UI
-        
-        # Calculate board size for 4:5 visual ratio
-        # visual_width : visual_height = 4 : 5
-        # game_width * char_ratio : game_height = 4 : 5
-        # game_width : game_height = 4 / (5 * char_ratio)
-        
-        ideal_ratio = target_ratio_w / (target_ratio_h * char_ratio)
-        
-        # Try width-constrained first
-        board_width = available_width
-        board_height = int(board_width / ideal_ratio)
-        
-        # If height exceeds available space, use height-constrained
-        if board_height > available_height:
-            board_height = available_height
-            board_width = int(board_height * ideal_ratio)
-        
-        # Ensure minimum sizes
-        board_width = max(20, min(board_width, available_width))
-        board_height = max(15, min(board_height, available_height))
-        
-        return board_width, board_height
-    
-    @staticmethod
-    def center_text(text, width=None):
-        """Center text in terminal, properly handling ANSI color codes"""
-        if width is None:
-            width, _ = TerminalUtils.get_terminal_size()
-        lines = text.split('\n')
-        centered_lines = []
-        for line in lines:
-            # Remove ANSI color codes for accurate length calculation
-            import re
-            clean_line = re.sub(r'\x1b\[[0-9;]*m', '', line)
-            padding = max(0, (width - len(clean_line)) // 2)
-            # Add padding only to the left, preserving the original line structure
-            centered_lines.append(' ' * padding + line)
-        return '\n'.join(centered_lines)
-    
-    @staticmethod
-    def center_block(lines, width=None):
-        """Center a block of text lines"""
-        if width is None:
-            width, _ = TerminalUtils.get_terminal_size()
-        centered_lines = []
-        for line in lines:
-            # Remove ANSI color codes for length calculation
-            import re
-            clean_line = re.sub(r'\x1b\[[0-9;]*m', '', line)
-            padding = max(0, (width - len(clean_line)) // 2)
-            centered_lines.append(' ' * padding + line)
-        return centered_lines
-
-class SnakeGame:
-    def __init__(self, difficulty='medium'):
-        # Get terminal dimensions
-        self.term_width, self.term_height = TerminalUtils.get_terminal_size()
-        
-        # Calculate optimal board size with 4:5 visual ratio
-        optimal_width, optimal_height = TerminalUtils.calculate_optimal_board_size(
-            self.term_width, self.term_height, target_ratio_w=4, target_ratio_h=5
-        )
-        
-        # Difficulty-based size modifiers
-        difficulty_modifiers = {
-            'easy': 0.8,    # 80% of optimal size
-            'medium': 1.0,  # 100% of optimal size  
-            'hard': 1.2     # 120% of optimal size
-        }
-        
-        modifier = difficulty_modifiers.get(difficulty, 1.0)
-        
-        # Apply difficulty modifier while maintaining 4:5 ratio
-        self.width = max(20, int(optimal_width * modifier))
-        self.height = max(15, int(optimal_height * modifier))
-        
-        # Ensure we don't exceed terminal bounds
-        self.width = min(self.width, self.term_width - 10)
-        self.height = min(self.height, self.term_height - 8)
-        
-        # Speed settings
-        speed_settings = {
-            'easy': 0.15,
-            'medium': 0.1,
-            'hard': 0.08
-        }
-        
-        self.base_speed = speed_settings[difficulty]
-        self.score = 0
-        self.running = True
-        self.foods_eaten = 0
-        self.level = 1
-        self.last_score_milestone = 0
-        
-        # Detect terminal type for better speed compensation
-        self.terminal_type = self.detect_terminal_type()
-        
-        # Universal speed compensation for cross-platform compatibility
-        # Most terminals have character aspect ratio between 1.6:1 to 2.2:1 (height:width)
-        # Use conservative ratio that works well across different systems
-        horizontal_ratio = 0.7  # Make horizontal movement faster
-        
-        self.speed_ratios = {
-            Direction.UP: 1.0,              # Vertical movement (normal speed)
-            Direction.DOWN: 1.0,            # Vertical movement (normal speed)
-            Direction.LEFT: horizontal_ratio,   # Horizontal movement (compensated)
-            Direction.RIGHT: horizontal_ratio   # Horizontal movement (compensated)
-        }
-        
-        # Snake starts in center
-        center_y, center_x = self.height // 2, self.width // 2
-        self.snake = [(center_y, center_x), (center_y, center_x - 1), (center_y, center_x - 2)]
-        self.direction = Direction.RIGHT
-        self.next_direction = Direction.RIGHT
-        
-        # Generate first food
-        self.food = self.generate_food()
-        
-        # Terminal setup (cross-platform)
-        self.old_settings = None
-        self.terminal_mode = False
-        
-        if UNIX_TERMINAL:
-            try:
-                self.old_settings = termios.tcgetattr(sys.stdin)
-                tty.setcbreak(sys.stdin.fileno())
-                self.terminal_mode = True
-            except (termios.error, OSError):
-                pass
-        elif WINDOWS_TERMINAL:
-            # Windows terminal is ready by default for getch
-            self.terminal_mode = True
-
-    def detect_terminal_type(self):
-        """Detect terminal type for cross-platform compatibility"""
-        term_program = os.environ.get('TERM_PROGRAM', '').lower()
-        term = os.environ.get('TERM', '').lower()
-        
-        if 'iterm' in term_program:
-            return 'iterm2'
-        elif 'apple_terminal' in term_program:
-            return 'terminal'
-        elif 'vscode' in term_program:
-            return 'vscode'
-        elif 'screen' in term or 'tmux' in os.environ.get('TMUX', ''):
-            return 'generic'
-        else:
-            return 'generic'
-
-    def generate_food(self):
-        """Generate food with improved positioning - avoid walls and snake body"""
-        attempts = 0
-        max_attempts = 100
-        
-        # Define safe zone boundaries (avoid too close to walls)
-        wall_margin = 2
-        vertical_margin = 1  # Reduced margin for top/bottom
-        safe_top = vertical_margin
-        safe_bottom = self.height - vertical_margin - 1
-        safe_left = wall_margin  
-        safe_right = self.width - wall_margin - 1
-        
-        while attempts < max_attempts:
-            # Try to place food in safe zone first
-            if attempts < max_attempts // 2:
-                food_y = random.randint(safe_top, safe_bottom)
-                food_x = random.randint(safe_left, safe_right)
-            else:
-                # Fallback to original method if safe zone fails
-                food_y = random.randint(1, self.height - 2)
-                food_x = random.randint(1, self.width - 2)
-            
-            food_pos = (food_y, food_x)
-            
-            # Check if position is valid (not in snake and not too close to snake head)
-            if food_pos not in self.snake:
-                # Additional check: not too close to snake head for better gameplay
-                head_y, head_x = self.snake[0]
-                distance = abs(food_y - head_y) + abs(food_x - head_x)
-                if distance >= 3:  # Manhattan distance of at least 3
-                    return food_pos
-            
-            attempts += 1
-        
-        # Emergency fallback - just avoid snake body
-        while True:
-            food_pos = (random.randint(1, self.height - 2), random.randint(1, self.width - 2))
-            if food_pos not in self.snake:
-                return food_pos
-
-    def get_key_press(self):
-        """Cross-platform non-blocking key input"""
-        if WINDOWS_TERMINAL:
-            # Windows implementation
-            if msvcrt.kbhit():
-                key = msvcrt.getch()
-                if isinstance(key, bytes):
-                    key = key.decode('utf-8', errors='ignore')
-                return key
-            return None
-        elif UNIX_TERMINAL:
-            # Unix/Linux/macOS implementation
-            try:
-                import select
-                if select.select([sys.stdin], [], [], 0.0)[0]:
-                    return sys.stdin.read(1)
-            except ImportError:
-                pass
-            return None
-        else:
-            # Fallback - blocking input (not ideal but works)
-            try:
-                user_input = input()
-                return user_input[:1] if user_input else None
-            except (EOFError, KeyboardInterrupt):
-                return None
-
-    def handle_input(self):
-        key = self.get_key_press()
-        if key:
-            if WINDOWS_TERMINAL and len(key) == 1 and ord(key) == 224:
-                # Windows special key prefix
-                key2 = self.get_key_press()
-                if key2:
-                    if ord(key2) == 72 and self.direction != Direction.DOWN:  # Up arrow
-                        self.next_direction = Direction.UP
-                    elif ord(key2) == 80 and self.direction != Direction.UP:  # Down arrow
-                        self.next_direction = Direction.DOWN
-                    elif ord(key2) == 77 and self.direction != Direction.LEFT:  # Right arrow
-                        self.next_direction = Direction.RIGHT
-                    elif ord(key2) == 75 and self.direction != Direction.RIGHT:  # Left arrow
-                        self.next_direction = Direction.LEFT
-            elif key == '\x1b':  # ESC sequence (Unix/Mac)
-                if UNIX_TERMINAL:
-                    key2 = sys.stdin.read(1)
-                    if key2 == '[':
-                        key3 = sys.stdin.read(1)
-                        if key3 == 'A' and self.direction != Direction.DOWN:
-                            self.next_direction = Direction.UP
-                        elif key3 == 'B' and self.direction != Direction.UP:
-                            self.next_direction = Direction.DOWN
-                        elif key3 == 'C' and self.direction != Direction.LEFT:
-                            self.next_direction = Direction.RIGHT
-                        elif key3 == 'D' and self.direction != Direction.RIGHT:
-                            self.next_direction = Direction.LEFT
-            elif key.lower() == 'q':
-                self.running = False
-
-    def move_snake(self):
-        self.direction = self.next_direction
-        head = self.snake[0]
-        dy, dx = self.direction.value
-        new_head = (head[0] + dy, head[1] + dx)
-        
-        # Check wall collision (walls are at 0 and height-1, width-1)
-        if (new_head[0] < 1 or new_head[0] >= self.height - 1 or 
-            new_head[1] < 1 or new_head[1] >= self.width - 1):
-            # Show wall collision explosion effect
-            self.wall_collision_effect(new_head)
-            return False
-        
-        # Check self collision
-        if new_head in self.snake:
-            return False
-        
-        self.snake.insert(0, new_head)
-        
-        # Check food
-        if new_head == self.food:
-            self.foods_eaten += 1
-            self.score += 10 + (self.level - 1) * 2  # Bonus points for higher levels
-            
-            # Level up every 5 foods
-            if self.foods_eaten % 5 == 0:
-                self.level += 1
-            
-            self.food = self.generate_food()
-        else:
-            self.snake.pop()
-        
+        "╭─│·←".encode(enc or "ascii")
         return True
+    except (LookupError, UnicodeEncodeError):
+        return False
 
-    def get_adjusted_speed(self):
-        """Get speed adjusted for current direction to compensate for terminal character ratio"""
-        return self.base_speed * self.speed_ratios[self.direction]
 
-    def draw_board(self):
-        TerminalUtils.clear_screen()
-        
-        # Create game board lines
-        board_lines = []
-        
-        # Enhanced header with more game info
-        score_text = Colors.color(f"Score: {self.score}", Colors.YELLOW + Colors.BOLD)
-        level_text = Colors.color(f"Level: {self.level}", Colors.CYAN + Colors.BOLD)
-        foods_text = Colors.color(f"Foods: {self.foods_eaten}", Colors.GREEN)
-        length_text = Colors.color(f"Length: {len(self.snake)}", Colors.MAGENTA)
-        quit_text = Colors.color("Q: Quit", Colors.RED + Colors.DIM)
-        
-        # Create multi-line header
-        header1 = f"| {score_text} | {level_text} | {foods_text} |"
-        header2 = f"| {length_text} | {quit_text} |"
-        
-        board_lines.append(header1)
-        board_lines.append(header2)
-        board_lines.append("+" + "=" * self.width + "+")
-        
-        # Game board with enhanced visuals
-        for y in range(self.height):
-            row = "|"
-            for x in range(self.width):
-                if y == 0 or y == self.height - 1 or x == 0 or x == self.width - 1:
-                    # Enhanced wall design
-                    if (y == 0 or y == self.height - 1) and (x == 0 or x == self.width - 1):
-                        row += Colors.color("+", Colors.WHITE + Colors.BOLD)  # Corners
-                    else:
-                        row += Colors.color("#", Colors.GRAY)  # Walls
-                elif (y, x) == self.snake[0]:  # Enhanced snake head
-                    if self.level >= 5:
-                        row += Colors.color("@", Colors.GREEN + Colors.BG_GREEN + Colors.BOLD)
-                    else:
-                        row += Colors.color("@", Colors.GREEN + Colors.BOLD)
-                elif (y, x) in self.snake:  # Enhanced snake body
-                    snake_index = self.snake.index((y, x))
-                    if snake_index < 3:  # First few segments are brighter
-                        row += Colors.color("o", Colors.GREEN + Colors.BOLD)
-                    else:
-                        row += Colors.color("o", Colors.GREEN)
-                elif (y, x) == self.food:  # Enhanced food with level-based effects
-                    if self.level >= 3:
-                        row += Colors.rainbow_text("*")  # Rainbow food at higher levels
-                    else:
-                        row += Colors.color("*", Colors.RED + Colors.BOLD)
-                else:
-                    row += " "
-            row += "|"
-            board_lines.append(row)
-        
-        # Enhanced footer with tips
-        board_lines.append("+" + "=" * self.width + "+")
-        
-        # Dynamic tips based on game state
-        if self.level == 1 and self.foods_eaten == 0:
-            tip_text = "TIP: Eat food (*) to grow and score points!"
-            tip = Colors.color(tip_text, Colors.CYAN + Colors.DIM)
-        elif self.level >= 3:
-            tip_text = "AWESOME: Rainbow food gives bonus points!"
-            tip = Colors.color(tip_text, Colors.MAGENTA + Colors.DIM)
-        elif len(self.snake) > 10:
-            tip_text = "CAREFUL: Don't hit your own tail!"
-            tip = Colors.color(tip_text, Colors.YELLOW + Colors.DIM)
-        else:
-            tip_text = "Arrow keys: Move | Q: Quit"
-            tip = Colors.color(tip_text, Colors.WHITE + Colors.DIM)
-        
-        # Center the footer text properly
-        tip_padding = max(0, (self.width - 2 - len(tip_text)) // 2)  # -2 for the border characters
-        footer = "|" + " " * tip_padding + tip + " " * (self.width - 2 - len(tip_text) - tip_padding) + "|"
-        board_lines.append(footer)
-        
-        # Add vertical centering
-        vertical_padding = max(0, (self.term_height - len(board_lines)) // 2 - 2)
-        for _ in range(vertical_padding):
-            print()
-        
-        # Center and print each line
-        for line in board_lines:
-            centered_line = TerminalUtils.center_text(line, self.term_width)
-            print(centered_line)
+# ------------------------------------------------------------------- screens
+class App:
+    def __init__(self, term, style, geometry, difficulty=None, detected_aspect=None,
+                 aspect_override=None):
+        self.term = term
+        self.st = style
+        self.geo = geometry
+        self.detected_aspect = detected_aspect
+        self.aspect_override = aspect_override
+        self.preset_difficulty = difficulty
 
-    def wall_collision_effect(self, collision_pos):
-        """Show explosion effect when hitting wall"""
-        explosion_frames = [
-            ["*", "**", "***"],
-            ["***", "*****", "*******"],
-            ["*****", "*******", "*********"],
-            ["***", "*****", "*******"],
-            ["*", "**", "***"]
-        ]
-        
-        explosion_colors = [Colors.RED, Colors.YELLOW, Colors.WHITE, Colors.YELLOW, Colors.RED]
-        
-        for frame_idx, frame in enumerate(explosion_frames):
-            TerminalUtils.clear_screen()
-            
-            # Show the explosion at collision point
-            board_lines = []
-            
-            # Header
-            header1 = "+" + "=" * self.width + "+"
-            header2 = "|" + " " * ((self.width - 8) // 2) + "CRASH!!!" + " " * (self.width - 8 - (self.width - 8) // 2) + "|"
-            board_lines.append(header1)
-            board_lines.append(header2)
-            board_lines.append("+" + "=" * self.width + "+")
-            
-            # Game board with explosion effect
-            for y in range(self.height):
-                row = "|"
-                for x in range(self.width):
-                    if y == 0 or y == self.height - 1 or x == 0 or x == self.width - 1:
-                        # Flash walls during explosion
-                        wall_char = "#"
-                        if frame_idx % 2 == 0:
-                            row += Colors.color(wall_char, Colors.BG_RED + Colors.WHITE + Colors.BOLD)
-                        else:
-                            row += Colors.color(wall_char, Colors.RED + Colors.BOLD)
-                    elif (y, x) in self.snake:
-                        # Show damaged snake
-                        if (y, x) == self.snake[0]:
-                            row += Colors.color("X", Colors.RED + Colors.BOLD)
-                        else:
-                            row += Colors.color("~", Colors.RED + Colors.DIM)
-                    elif abs(y - collision_pos[0]) <= 1 and abs(x - collision_pos[1]) <= 1:
-                        # Show explosion around collision point
-                        if frame_idx < len(frame) and abs(y - collision_pos[0]) < len(frame):
-                            explosion_char = "*" if frame_idx % 2 == 0 else "+"
-                            row += Colors.color(explosion_char, explosion_colors[frame_idx] + Colors.BOLD + Colors.BLINK)
-                        else:
-                            row += " "
-                    else:
-                        row += " "
-                row += "|"
-                board_lines.append(row)
-            
-            board_lines.append("+" + "=" * self.width + "+")
-            
-            # Center and print
-            vertical_padding = max(0, (self.term_height - len(board_lines)) // 2 - 2)
-            for _ in range(vertical_padding):
-                print()
-            
-            for line in board_lines:
-                centered_line = TerminalUtils.center_text(line, self.term_width)
-                print(centered_line)
-            
-            time.sleep(0.2)  # Animation speed
-
-    def game_over(self):
-        TerminalUtils.clear_screen()
-        
-        # Enhanced game over screen with stats
-        box_width = 50
-        
-        # Create game over title with effects
-        if self.score >= 100:
-            title_text = "GAME OVER!"
-            title = Colors.rainbow_text(title_text)
-        else:
-            title_text = "GAME OVER!"
-            title = Colors.color(title_text, Colors.RED + Colors.BOLD)
-        
-        # Performance evaluation
-        if self.score >= 200:
-            perf_text = "INCREDIBLE SCORE!"
-            performance = Colors.color(perf_text, Colors.YELLOW + Colors.BOLD)
-        elif self.score >= 100:
-            perf_text = "Great job!"
-            performance = Colors.color(perf_text, Colors.GREEN + Colors.BOLD)
-        elif self.score >= 50:
-            perf_text = "Not bad!"
-            performance = Colors.color(perf_text, Colors.CYAN)
-        else:
-            perf_text = "Keep practicing!"
-            performance = Colors.color(perf_text, Colors.BLUE)
-        
-        # Create all text lines first
-        stats = [
-            f"Final Score: {self.score} points",
-            f"Level Reached: {self.level}",
-            f"Foods Eaten: {self.foods_eaten}",
-            f"Snake Length: {len(self.snake)}"
-        ]
-        
-        restart_text = "Press 'y' to play again, 'n' to quit"
-        
-        # Build the box with proper centering
-        game_over_lines = []
-        
-        # Top border
-        game_over_lines.append("+" + "=" * box_width + "+")
-        
-        # Title line with proper centering
-        title_padding = (box_width - len(title_text)) // 2
-        title_line = "|" + " " * title_padding + title + " " * (box_width - len(title_text) - title_padding) + "|"
-        game_over_lines.append(title_line)
-        
-        # Separator
-        game_over_lines.append("+" + "-" * box_width + "+")
-        
-        # Empty line
-        game_over_lines.append("|" + " " * box_width + "|")
-        
-        # Stats lines
-        for stat in stats:
-            game_over_lines.append("|" + stat.center(box_width) + "|")
-        
-        # Empty line
-        game_over_lines.append("|" + " " * box_width + "|")
-        
-        # Performance line with proper centering
-        perf_padding = (box_width - len(perf_text)) // 2
-        perf_line = "|" + " " * perf_padding + performance + " " * (box_width - len(perf_text) - perf_padding) + "|"
-        game_over_lines.append(perf_line)
-        
-        # Empty line
-        game_over_lines.append("|" + " " * box_width + "|")
-        
-        # Bottom border
-        game_over_lines.append("+" + "=" * box_width + "+")
-        
-        # Add vertical centering
-        vertical_padding = max(0, (self.term_height - len(game_over_lines)) // 2)
-        for _ in range(vertical_padding):
-            print()
-        
-        # Center and print each line
-        for line in game_over_lines:
-            centered_line = TerminalUtils.center_text(line, self.term_width)
-            print(centered_line)
-            
-        # Add some space before the navigation menu
-        print()
-        print()
-        
-        # Now show the navigation menu
-        return self.show_game_over_menu()
-    
-    def show_game_over_menu(self):
-        """Show game over menu with arrow navigation and return True if play again"""
-        options = ['Play Again', 'Quit']
-        selected = 0
-        
-        # Setup terminal for arrow key input
-        old_settings = None
-        if UNIX_TERMINAL:
-            try:
-                old_settings = termios.tcgetattr(sys.stdin)
-                tty.setcbreak(sys.stdin.fileno())
-            except:
-                pass
-        
-        try:
-            while True:
-                # Clear just the menu area by moving cursor up and clearing lines
-                print("\033[6A", end="")  # Move cursor up 6 lines
-                for _ in range(6):
-                    print("\033[K")  # Clear line
-                
-                # Options
-                for i, option in enumerate(options):
-                    if i == selected:
-                        # Highlighted option
-                        line = Colors.color(f"> {option}", Colors.GREEN + Colors.BOLD)
-                    else:
-                        # Normal option
-                        line = f"  {option}"
-                    
-                    centered_line = TerminalUtils.center_text(line, self.term_width)
-                    print(centered_line)
-                
-                print()
-                instructions = "Use ↑↓ arrows to navigate, Enter to select, ESC to quit"
-                centered_instructions = TerminalUtils.center_text(instructions, self.term_width)
-                print(Colors.color(centered_instructions, Colors.GRAY))
-                
-                # Wait for key input
-                key = get_key_input()
-                if key == 'UP':
+    # -- generic menu -------------------------------------------------------
+    def menu(self, title_lines, options, selected=0, footer=None, hotkeys=None):
+        """Arrow-key menu. Returns the selected index, or None for quit."""
+        hotkeys = hotkeys or {}
+        last_size = None
+        dirty = True
+        while True:
+            size = self.term.size()
+            if size != last_size or dirty:
+                self._draw_menu(title_lines, options, selected, footer, clear=size != last_size)
+                last_size, dirty = size, False
+            for key in self.term.read_keys(0.25):
+                dirty = True
+                if key in ("UP", "k", "w"):
                     selected = (selected - 1) % len(options)
-                elif key == 'DOWN':
+                elif key in ("DOWN", "j", "s"):
                     selected = (selected + 1) % len(options)
-                elif key == 'ENTER':
-                    return selected == 0  # True for Play Again, False for Quit
-                elif key == 'ESC' or key == 'q':
-                    return False  # Quit
-                
-                time.sleep(0.05)  # Prevent excessive CPU usage
-        
-        finally:
-            # Restore terminal settings
-            if UNIX_TERMINAL and old_settings:
-                try:
-                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-                except:
-                    pass
+                elif key in ("ENTER", "SPACE"):
+                    return selected
+                elif key in ("ESC", "q"):
+                    return None
+                elif key in hotkeys:
+                    return hotkeys[key]
 
-    def cleanup(self):
-        """Cross-platform terminal cleanup"""
-        if UNIX_TERMINAL and self.old_settings is not None:
-            try:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
-            except:
-                pass
-        # Windows doesn't need special cleanup for msvcrt
+    def _draw_menu(self, title_lines, options, selected, footer, clear):
+        st = self.st
+        tw, th = self.term.size()
+        pointer = "▶ " if st.dot == "·" else "> "
+        opt_width = max(visible_len(o) for o in options) + 2
+        option_lines = []
+        for i, opt in enumerate(options):
+            if i == selected:
+                option_lines.append(st(pointer, 92, 1) + st(opt, 1))
+            else:
+                option_lines.append("  " + st(opt, 2))
+        footer_line = st(footer or "↑↓ select   Enter confirm   Q quit", 90)
+
+        # Title and footer are centred; options share one left edge.
+        total = len(title_lines) + len(option_lines) + 3
+        out = [""] * max(0, (th - total) // 2)
+        out.extend(center(l, tw) for l in title_lines)
+        out.append("")
+        indent = " " * max(0, (tw - opt_width) // 2)
+        out.extend(indent + l for l in option_lines)
+        out.append("")
+        out.append(center(footer_line, tw))
+        self.term.draw(out, clear=clear)
+
+    def logo(self):
+        st = self.st
+        art = [
+            ("  ____              _        ", (92, 1)),
+            (" / ___| _ __   __ _| | _____ ", (92, 1)),
+            (" \\___ \\| '_ \\ / _` | |/ / _ \\", (32, 1)),
+            ("  ___) | | | | (_| |   <  __/", (32, 1)),
+            (" |____/|_| |_|\\__,_|_|\\_\\___|", (32,)),
+        ]
+        width = max(len(t) for t, _ in art)
+        lines = [st(t.ljust(width), *codes) for t, codes in art]
+        lines.append(st(("terminal edition v%s" % __version__).center(width), 90))
+        return lines
+
+    def choose_difficulty(self, current="medium"):
+        best = scores.load()
+        labels = []
+        for name in DIFFICULTY_NAMES:
+            b = best.get(name)
+            labels.append("%-7s %s" % (name.capitalize(), ("best %d" % b) if b else ""))
+        labels.append("Display calibration")
+        labels.append("Quit")
+        n = len(DIFFICULTY_NAMES)
+        hotkeys = {str(i + 1): i for i in range(n)}
+        hotkeys["c"] = n
+        selected = DIFFICULTY_NAMES.index(current)
+        while True:
+            idx = self.menu(self.logo(), labels, selected,
+                            footer="↑↓/1-3 select   Enter play   C calibrate   Q quit",
+                            hotkeys=hotkeys)
+            if idx == n:
+                self.calibrate()
+                selected = n
+                continue
+            if idx is None or idx > n:
+                return None
+            return DIFFICULTY_NAMES[idx]
+
+    # -- the game -----------------------------------------------------------
+    def board_size(self):
+        tw, th = self.term.size()
+        w = min(MAX_BOARD[0], (tw - 2) // self.geo.cell_chars)
+        h = min(MAX_BOARD[1], th - 4)
+        return w, h
+
+    def wait_for_space(self):
+        """Block until the terminal can hold the minimum board. False = quit."""
+        while True:
+            w, h = self.board_size()
+            if w >= MIN_BOARD[0] and h >= MIN_BOARD[1]:
+                return True
+            tw, th = self.term.size()
+            need = (MIN_BOARD[0] * self.geo.cell_chars + 2, MIN_BOARD[1] + 4)
+            self.term.draw([
+                self.st("Terminal too small (%dx%d)." % (tw, th), 93, 1),
+                "Resize to at least %dx%d," % need,
+                "or press Q to quit.",
+            ], clear=True)
+            if any(k in ("q", "ESC") for k in self.term.read_keys(0.3)):
+                return False
+
+    def play(self, difficulty):
+        """Run one round. Returns the finished engine, or None if aborted early."""
+        if not self.wait_for_space():
+            return None
+        w, h = self.board_size()
+        game = SnakeEngine(w, h, difficulty)
+        best = scores.load().get(difficulty, 0)
+
+        paused = False
+        too_small = False
+        banner_until = 0.0
+        tick = 0
+        last_size = self.term.size()
+        self.render(game, best, tick, status="", clear=True)
+        last_step = time.monotonic()
+
+        while game.alive:
+            # The wait before each move depends on the direction of that move,
+            # so on-screen speed is the same horizontally and vertically.
+            # Re-evaluated every pass, so a turn pressed mid-wait counts.
+            deadline = last_step + self.move_interval(game)
+            timeout = 0.25 if (paused or too_small) else deadline - time.monotonic()
+            keys = self.term.read_keys(timeout)
+            redraw = False
+            for key in keys:
+                if key in ("q", "ESC"):
+                    game.alive = False
+                    break
+                if key in ("p", "SPACE"):
+                    paused = not paused
+                    redraw = True
+                elif key in KEY_TO_DIRECTION and not paused:
+                    game.queue_direction(KEY_TO_DIRECTION[key])
+            if not game.alive:
+                break
+
+            size = self.term.size()
+            clear = size != last_size
+            if clear:
+                last_size = size
+                self.refresh_geometry()
+                bw, bh = self.board_size()
+                too_small = bw < game.width or bh < game.height
+                redraw = True
+
+            now = time.monotonic()
+            deadline = last_step + self.move_interval(game)
+            if paused or too_small:
+                last_step = now
+            elif now >= deadline:
+                game.step()
+                tick += 1
+                if game.leveled_up:
+                    banner_until = now + 1.5
+                # Anchor to the deadline (no drift) unless we fell well behind,
+                # in which case don't try to "catch up" with a burst of moves.
+                last_step = deadline if now - deadline < game.interval * 0.5 else now
+                redraw = True
+
+            if redraw and game.alive:
+                if too_small:
+                    status = "too_small"
+                elif paused:
+                    status = "paused"
+                elif now < banner_until:
+                    status = "level_up"
+                else:
+                    status = ""
+                self.render(game, best, tick, status, clear=clear)
+
+        if game.death_cell is not None:
+            self.death_animation(game, best)
+        return game
+
+    def move_interval(self, game):
+        fh, fv = self.geo.move_factors()
+        vertical = game.next_direction in (Direction.UP, Direction.DOWN)
+        return game.interval * (fv if vertical else fh)
+
+    def refresh_geometry(self):
+        """Font zoom changes the pixel size; follow it when auto-detecting."""
+        if self.geo.source != "auto-detected":
+            return
+        px = self.term.char_pixel_size(query=False)
+        aspect = display.aspect_from_pixels(*px) if px else None
+        if aspect and abs(aspect - self.geo.char_aspect) > 0.02:
+            self.geo = display.Geometry(aspect, "auto-detected")
+
+    # -- calibration ----------------------------------------------------------
+    def calibrate(self):
+        """
+        Show a box that should look square and a dot running around it at
+        constant on-screen speed. ←/→ adjust until both look right.
+        """
+        st = self.st
+        aspect = self.geo.char_aspect
+        step_chars = 0.045          # seconds per one-character horizontal move
+        pos = 0
+        last_move = time.monotonic()
+        last_size = None
+        dirty = True
+        while True:
+            tw, th = self.term.size()
+            box_w = max(10, min(44, tw - 6))
+            box_h = max(4, int(round(box_w / aspect)))
+            box_h = min(box_h, max(4, th - 9))
+            path = ([(0, c) for c in range(box_w - 1)] +
+                    [(r, box_w - 1) for r in range(box_h - 1)] +
+                    [(box_h - 1, c) for c in range(box_w - 1, 0, -1)] +
+                    [(r, 0) for r in range(box_h - 1, 0, -1)])
+            pos %= len(path)
+
+            now = time.monotonic()
+            r0, c0 = path[pos]
+            r1, c1 = path[(pos + 1) % len(path)]
+            wait = step_chars * (aspect if r1 != r0 else 1.0)
+            if now - last_move >= wait:
+                pos = (pos + 1) % len(path)
+                last_move += wait if now - last_move < wait * 3 else now - last_move
+                dirty = True
+
+            if dirty or (tw, th) != last_size:
+                geo = display.Geometry(aspect, "preview")
+                text = [st("Display calibration", 96, 1), "",
+                        "Adjust until the box looks square and the dot",
+                        "moves at the same speed along every side.", ""]
+                box = []
+                marker = st("@", 93, 1) if st.color else "@"
+                tl, tr, bl, br, hz, vt = st.box
+                cur = path[pos]
+                left = " " * max(0, (tw - box_w) // 2)
+                for r in range(box_h):
+                    row = []
+                    for c in range(box_w):
+                        if (r, c) == cur:
+                            row.append(marker)
+                        elif r in (0, box_h - 1) or c in (0, box_w - 1):
+                            ch = (tl if (r, c) == (0, 0) else tr if (r, c) == (0, box_w - 1) else
+                                  bl if (r, c) == (box_h - 1, 0) else
+                                  br if (r, c) == (box_h - 1, box_w - 1) else
+                                  hz if r in (0, box_h - 1) else vt)
+                            row.append(st(ch, 90))
+                        else:
+                            row.append(" ")
+                    box.append(left + "".join(row))
+                info = ["", st("char ratio %.2f  ->  board cells %d char%s wide"
+                               % (aspect, geo.cell_chars, "" if geo.cell_chars == 1 else "s"), 93),
+                        st("←/→ adjust   R auto   Enter save   Esc cancel", 90)]
+                lines = [center(l, tw) for l in text] + box + [center(l, tw) for l in info]
+                pad = [""] * max(0, (th - len(lines)) // 2)
+                self.term.draw(pad + lines, clear=(tw, th) != last_size)
+                last_size, dirty = (tw, th), False
+
+            timeout = max(0.0, min(0.25, last_move + wait - time.monotonic()))
+            for key in self.term.read_keys(timeout):
+                if key in ("LEFT", "a", "h", "-"):
+                    aspect = display.clamp_aspect(aspect - 0.05)
+                    dirty = True
+                elif key in ("RIGHT", "d", "l", "+", "="):
+                    aspect = display.clamp_aspect(aspect + 0.05)
+                    dirty = True
+                elif key == "r":
+                    aspect = self.detected_aspect or display.DEFAULT_CHAR_ASPECT
+                    dirty = True
+                elif key == "ENTER":
+                    auto = self.detected_aspect or display.DEFAULT_CHAR_ASPECT
+                    if abs(aspect - auto) < 0.025:
+                        settings.set_char_aspect(None)
+                    else:
+                        settings.set_char_aspect(aspect)
+                    self.geo = display.resolve(self.detected_aspect, settings.saved_char_aspect(),
+                                               self.aspect_override)
+                    return
+                elif key in ("ESC", "q"):
+                    return
+
+    def death_animation(self, game, best):
+        for frame in range(6):
+            self.render(game, best, frame, status="crash", dead=True)
+            time.sleep(0.09)
+        # swallow keys mashed during the crash so they don't skip the summary
+        self.term.read_keys(0.25)
+
+    def render(self, game, best, tick, status="", clear=False, dead=False):
+        st = self.st
+        tw, th = self.term.size()
+        if status == "too_small":
+            msg = [st("Window too small", 93, 1), "enlarge it to continue", st("(Q quits)", 90)]
+            pad = [""] * max(0, (th - len(msg)) // 2)
+            self.term.draw(pad + [center(m, tw) for m in msg], clear=True)
+            return
+        tl, tr, bl, br, hz, vt = st.box
+
+        n = self.geo.cell_chars
+        board_w = game.width * n + 2
+        left = " " * max(0, (tw - board_w) // 2)
+        top = max(0, (th - (game.height + 4)) // 2)
+
+        sep = st("  %s  " % st.dot, 90)
+        header = sep.join([
+            st("Score ", 90) + st(str(game.score), 93, 1),
+            st("Best ", 90) + st(str(max(best, game.score)), 33),
+            st("Lv ", 90) + st(str(game.level), 96, 1),
+            st("Len ", 90) + st(str(len(game.body)), 95),
+        ])
+
+        lines = [""] * top
+        lines.append(" " * max(0, (tw - visible_len(header)) // 2) + header)
+        lines.append(left + st(tl + hz * (board_w - 2) + tr, 90))
+
+        head = game.head
+        food_kind = "food_rainbow" if game.level >= 3 else "food"
+        wall = st(vt, 90)
+        for r in range(game.height):
+            row = [left, wall]
+            for c in range(game.width):
+                cell = (r, c)
+                if dead and cell == head:
+                    row.append(st.cell("dead", n))
+                elif cell == head:
+                    row.append(st.cell("head", n))
+                elif cell in game.occupied:
+                    row.append(st.cell("dead_body" if dead else "body", n, tick))
+                elif cell == game.food:
+                    row.append(st.cell(food_kind, n, tick))
+                else:
+                    row.append(" " * n)
+            row.append(wall)
+            lines.append("".join(row))
+        lines.append(left + st(bl + hz * (board_w - 2) + br, 90))
+
+        messages = {
+            "paused": st("PAUSED", 93, 1) + st("  P/Space resume  Q quit", 90),
+            "level_up": st("LEVEL UP!", 96, 1) + st("  speed increased", 90),
+            "crash": st("CRASH!", 91, 1),
+            "too_small": st("Window too small - enlarge to continue", 93, 1),
+        }
+        footer = messages.get(status) or st("←↑↓→/WASD move   P pause   Q quit", 90)
+        lines.append(center(footer, tw))
+        self.term.draw(lines, clear=clear)
+
+    def game_over(self, game, difficulty):
+        st = self.st
+        new_best = scores.record(difficulty, game.score)
+        if game.won:
+            title = st("YOU WIN!", 92, 1)
+        else:
+            title = st("GAME OVER", 91, 1)
+        if new_best and game.score > 0:
+            verdict = st("NEW BEST SCORE!", 93, 1)
+        elif game.score >= 200:
+            verdict = st("Incredible!", 93)
+        elif game.score >= 100:
+            verdict = st("Great job!", 92)
+        elif game.score >= 50:
+            verdict = st("Not bad!", 96)
+        else:
+            verdict = st("Keep practicing!", 94)
+        info = [
+            title, "",
+            "Score  " + st("%8d" % game.score, 93, 1),
+            "Level  %8d" % game.level,
+            "Length %8d" % len(game.body),
+            "Mode   %8s" % difficulty.capitalize(),
+            "", verdict,
+        ]
+        return self.menu(info, ["Play again", "Change difficulty", "Quit"],
+                         footer="↑↓ select   Enter confirm   R retry   Q quit",
+                         hotkeys={"r": 0, "y": 0, "n": 2})
 
     def run(self):
-        try:
-            while self.running:
-                self.draw_board()
-                self.handle_input()
-                
-                if not self.move_snake():
-                    break
-                
-                # Use direction-adjusted speed
-                adjusted_speed = self.get_adjusted_speed()
-                time.sleep(adjusted_speed)
-            
-        finally:
-            self.cleanup()
-
-def show_logo():
-    term_width, term_height = TerminalUtils.get_terminal_size()
-    
-    logo_text = """
-+===============================================+
-|                 SNAKE GAME                    |
-|              Terminal Edition                 |
-+===============================================+
-|                                               |
-|  [@] Snake Head    [o] Snake Body             |
-|  [*] Food          [#] Wall                   |
-|                                               |
-|  Arrow Keys: Move  |  Q: Quit                 |
-+===============================================+
-"""
-    
-    # Center the logo
-    centered_logo = TerminalUtils.center_text(logo_text, term_width)
-    
-    # Add vertical centering
-    logo_lines = logo_text.strip().split('\n')
-    vertical_padding = max(0, (term_height - len(logo_lines)) // 2 - 3)
-    
-    TerminalUtils.clear_screen()
-    for _ in range(vertical_padding):
-        print()
-    
-    print(centered_logo)
-
-def get_key_input():
-    """Get a single key input cross-platform"""
-    if WINDOWS_TERMINAL:
-        if msvcrt.kbhit():
-            key = msvcrt.getch()
-            if isinstance(key, bytes):
-                key = key.decode('utf-8', errors='ignore')
-            if len(key) == 1 and ord(key) == 224:  # Arrow key prefix
-                key2 = msvcrt.getch()
-                if isinstance(key2, bytes):
-                    key2 = key2.decode('utf-8', errors='ignore')
-                if ord(key2) == 72:
-                    return 'UP'
-                elif ord(key2) == 80:
-                    return 'DOWN'
-                elif ord(key2) == 13:  # Enter
-                    return 'ENTER'
-            elif ord(key) == 13:  # Enter
-                return 'ENTER'
-            elif ord(key) == 27:  # ESC
-                return 'ESC'
-            return key
-    elif UNIX_TERMINAL:
-        import select
-        if select.select([sys.stdin], [], [], 0.1)[0]:
-            key = sys.stdin.read(1)
-            if key == '\x1b':  # ESC sequence
-                if select.select([sys.stdin], [], [], 0.1)[0]:
-                    key += sys.stdin.read(1)  # [
-                    if key == '\x1b[' and select.select([sys.stdin], [], [], 0.1)[0]:
-                        key += sys.stdin.read(1)  # A/B/C/D
-                        if key == '\x1b[A':
-                            return 'UP'
-                        elif key == '\x1b[B':
-                            return 'DOWN'
-                return 'ESC'
-            elif key == '\n' or key == '\r':
-                return 'ENTER'
-            return key
-    return None
-
-def select_difficulty():
-    menu_options = ['Easy', 'Medium', 'Hard', 'Quit']
-    descriptions = [
-        'Relaxed pace, perfect for beginners',
-        'Standard speed, good challenge',
-        'Fast-paced, for experienced players',
-        'Exit the game'
-    ]
-    selected = 0
-    
-    # Setup terminal for arrow key input
-    old_settings = None
-    if UNIX_TERMINAL:
-        try:
-            old_settings = termios.tcgetattr(sys.stdin)
-            tty.setcbreak(sys.stdin.fileno())
-        except:
-            pass
-    
-    try:
-        while True:
-            term_width, term_height = TerminalUtils.get_terminal_size()
-            TerminalUtils.clear_screen()
-            show_logo()
-            
-            # Title
-            title = "=== Select Difficulty ==="
-            centered_title = TerminalUtils.center_text(title, term_width)
-            print(centered_title)
-            print()
-            
-            # Menu options
-            for i, (option, desc) in enumerate(zip(menu_options, descriptions)):
-                if i == selected:
-                    # Highlighted option
-                    line = Colors.color(f"> {option}", Colors.GREEN + Colors.BOLD) + f" - {desc}"
-                else:
-                    # Normal option
-                    line = f"  {option} - {desc}"
-                
-                centered_line = TerminalUtils.center_text(line, term_width)
-                print(centered_line)
-            
-            print()
-            instructions = "Use ↑↓ arrows to navigate, Enter to select, ESC to quit"
-            centered_instructions = TerminalUtils.center_text(instructions, term_width)
-            print(Colors.color(centered_instructions, Colors.GRAY))
-            
-            # Wait for key input
-            key = get_key_input()
-            if key == 'UP':
-                selected = (selected - 1) % len(menu_options)
-            elif key == 'DOWN':
-                selected = (selected + 1) % len(menu_options)
-            elif key == 'ENTER':
-                if selected == 0:
-                    return 'easy'
-                elif selected == 1:
-                    return 'medium'
-                elif selected == 2:
-                    return 'hard'
-                elif selected == 3:
-                    return None
-            elif key == 'ESC' or key == 'q':
-                return None
-            
-            time.sleep(0.05)  # Prevent excessive CPU usage
-    
-    finally:
-        # Restore terminal settings
-        if UNIX_TERMINAL and old_settings:
-            try:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-            except:
-                pass
-
-def main():
-    """Main game loop"""
-    # Check for version flag
-    if len(sys.argv) > 1 and sys.argv[1] in ['--version', '-v']:
-        from . import __version__
-        print(f"Snake Game CLI v{__version__}")
-        print("A modern terminal-based snake game with enhanced features")
-        return
-    
-    try:
-        while True:
-            difficulty = select_difficulty()
-            if not difficulty:
-                break
-                
-            game = SnakeGame(difficulty)
-            game.run()
-            
-            # The game_over method now returns True/False for play again
-            if not game.game_over():
-                term_width, _ = TerminalUtils.get_terminal_size()
-                thanks_msg = "Thanks for playing!"
-                centered_thanks = TerminalUtils.center_text(thanks_msg, term_width)
-                print(centered_thanks)
+        difficulty = self.preset_difficulty or self.choose_difficulty()
+        while difficulty:
+            game = self.play(difficulty)
+            if game is None:
                 return
-                    
+            choice = self.game_over(game, difficulty)
+            if choice == 0:
+                continue
+            if choice == 1:
+                difficulty = self.choose_difficulty(difficulty)
+            else:
+                return
+
+
+# ----------------------------------------------------------------------- CLI
+def parse_args(argv):
+    p = argparse.ArgumentParser(prog="snakegame", description="Classic Snake in your terminal.")
+    p.add_argument("-v", "--version", action="version", version="snakegame %s" % __version__)
+    p.add_argument("-d", "--difficulty", choices=DIFFICULTY_NAMES,
+                   help="skip the menu and start at this difficulty")
+    p.add_argument("--no-color", action="store_true", help="plain ASCII rendering")
+    p.add_argument("--scores", action="store_true", help="print best scores and exit")
+    p.add_argument("--calibrate", action="store_true",
+                   help="open the display calibration screen first")
+    p.add_argument("--aspect", type=float, metavar="RATIO",
+                   help="character height/width ratio of your font (default: auto-detect)")
+    return p.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+
+    if args.scores:
+        best = scores.load()
+        for name in DIFFICULTY_NAMES:
+            print("%-7s %d" % (name, best.get(name, 0)))
+        print("(%s)" % scores.scores_path())
+        return 0
+
+    style = Style(color=colors_supported() and not args.no_color, unicode_ok=_unicode_ok())
+    try:
+        with Terminal() as term:
+            px = term.char_pixel_size()
+            detected = display.aspect_from_pixels(*px) if px else None
+            geo = display.resolve(detected, settings.saved_char_aspect(), args.aspect)
+            app = App(term, style, geo, args.difficulty, detected, args.aspect)
+            if args.calibrate:
+                app.calibrate()
+            app.run()
     except KeyboardInterrupt:
-        term_width, _ = TerminalUtils.get_terminal_size()
-        thanks_msg = "\nThanks for playing!"
-        centered_thanks = TerminalUtils.center_text(thanks_msg, term_width)
-        print(centered_thanks)
-    except Exception as e:
-        term_width, _ = TerminalUtils.get_terminal_size()
-        error_msg = f"An error occurred: {e}"
-        centered_error = TerminalUtils.center_text(error_msg, term_width)
-        print(centered_error)
+        pass
+    print("Thanks for playing!")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

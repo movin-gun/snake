@@ -1,96 +1,119 @@
 # 🐍 Snake Game CLI
 
-A modern terminal-based snake game with enhanced visuals and gameplay features!
+Classic Snake for your terminal. Pure Python standard library — no dependencies.
 
-## ✨ Features
+- Flicker-free rendering with square-looking cells, adapted to your font
+- Same on-screen speed in every direction (each move's timing matches the distance it covers)
+- Responsive controls: every key press is buffered, so quick turns never get lost
+- Gets faster every level; best score saved per difficulty
+- Pause, terminal-resize handling, plain-ASCII mode
+- macOS, Linux, WSL and Windows (Windows Terminal / PowerShell / cmd)
 
-- 🎮 **Enhanced Gameplay**: Level system with progressive difficulty
-- 🌈 **Visual Effects**: Rainbow food, glowing snake, dynamic colors
-- 📊 **Smart UI**: Auto-centering, adaptive board sizing, real-time stats
-- 🎯 **Improved Food Generation**: Smart positioning away from walls
-- ⚡ **Optimized Controls**: Direction-compensated movement speed
-- 📱 **Cross-platform**: Works perfectly on any terminal
+## 🚀 Quick start
 
-## 🚀 Quick Start
-
-### ⚡ **Ultra Simple - Copy & Paste:**
-
-**macOS/Linux/WSL:**
+**Play once (macOS / Linux / WSL)**
 ```bash
-curl -sL raw.githubusercontent.com/movin-gun/snake/main/play.sh|sh
+curl -fsSL https://raw.githubusercontent.com/movin-gun/snake/main/play.sh | sh
 ```
 
-**Windows PowerShell:**
+**Play once (Windows PowerShell)**
 ```powershell
-iwr raw.githubusercontent.com/movin-gun/snake/main/install.ps1|iex
+irm https://raw.githubusercontent.com/movin-gun/snake/main/install.ps1 | iex
 ```
 
-### 🏠 **Install Permanently:**
+**Install with pip** (recommended)
 ```bash
-curl -s raw.githubusercontent.com/movin-gun/snake/main/quick_start.sh|bash -s install
+pip install git+https://github.com/movin-gun/snake.git
+snakegame
 ```
 
-### 📱 **Even Shorter:**
+**Install without pip (macOS / Linux / WSL)**
 ```bash
-# Super short version (when available)
-curl -sL bit.ly/snake-cli|sh
+curl -fsSL https://raw.githubusercontent.com/movin-gun/snake/main/quick_start.sh | sh -s install
+# remove again with: ... | sh -s uninstall
 ```
 
-### 🐍 **Pip Style (Simplest):**
+**Install without pip (Windows PowerShell)**
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/movin-gun/snake/main/install.ps1))) -Mode install
+```
+
+**From a clone**
 ```bash
-pip install git+https://github.com/movin-gun/snake.git && snakegame
+python3 -m snake_game
 ```
 
-### 🛠️ **For Developers:**
-```bash
-pip install git+https://github.com/movin-gun/snake.git && snakegame
+## 🎮 Controls
+
+| Key | Action |
+| --- | --- |
+| `← ↑ ↓ →` / `W A S D` / `H J K L` | Move |
+| `P` or `Space` | Pause / resume |
+| `Q` or `Esc` | End the round |
+| `1` `2` `3` | Pick difficulty in the menu |
+| `R` | Retry on the game-over screen |
+
+## 📏 Rules
+
+- Every food: **10 points + 2 × (level − 1)**
+- Level up every **5 foods**; each level makes the snake faster (down to a per-difficulty cap)
+- Hitting a wall or your body ends the round. Moving into the cell your tail is leaving is allowed.
+- Fill the whole board to win
+- Food turns rainbow from level 3
+
+| Difficulty | Start speed | Fastest |
+| --- | --- | --- |
+| Easy | 0.16 s/move | 0.08 s |
+| Medium | 0.12 s/move | 0.06 s |
+| Hard | 0.09 s/move | 0.045 s |
+
+## ⚙️ Options
+
+```
+snakegame [-d {easy,medium,hard}] [--no-color] [--scores] [--calibrate] [--aspect RATIO] [--version]
 ```
 
-## 🎮 How to Play
+- `-d hard` — skip the menu
+- `--no-color` — ASCII-only board (also honoured via the `NO_COLOR` environment variable)
+- `--scores` — print best scores and where they are stored
+- `--calibrate` — open the display calibration screen (also `C` in the menu)
+- `--aspect 2.6` — tell the game your font's character height/width ratio
 
-### Controls
-- **Arrow Keys**: Move snake (↑ ↓ ← →)
-- **Q**: Quit game
-- **1-3**: Select difficulty
+### Display calibration
 
-### Gameplay Features
-- 🍎 **Smart Food**: Spawns away from walls for better gameplay
-- 📊 **Level System**: Level up every 5 foods eaten
-- 🌈 **Visual Progression**: Rainbow food at level 3+, glowing snake at level 5+
-- ⚡ **Adaptive Speed**: Movement speed compensated for terminal character ratios
-- 📏 **Dynamic Sizing**: Game board automatically fits your terminal
+Terminal characters are not square, and the ratio depends on your font
+(about 2.0 for Menlo / SF Mono / Consolas, up to ~2.7 for narrow fonts such as D2Coding).
+The game asks the terminal for its character size in pixels and then
 
-### Scoring
-- **Base Points**: 10 points per food
-- **Level Bonus**: +2 points per level above 1
-- **Progressive Challenge**: Speed and visual effects increase with level
+1. picks how many characters make one board cell (1–3) so cells look square, and
+2. times vertical and horizontal moves by the distance they cover on screen,
+   so the snake never looks faster in one direction.
 
-## 🛠️ Requirements
+Most modern terminals report their size (iTerm2, kitty, WezTerm, VS Code, xterm, GNOME Terminal…).
+If yours doesn't — or it still looks off — open **Display calibration** from the menu,
+press `←` / `→` until the box looks square and the dot moves evenly, then `Enter`.
+`R` returns to the detected value.
 
-- Python 3.7+
-- **Windows**: Command Prompt, PowerShell, or Windows Terminal
-- **macOS/Linux**: Any terminal with ANSI color support
-- No external dependencies needed!
+Best scores live in `~/.local/share/snake-game/scores.json`
+(`%APPDATA%\snake-game\scores.json` on Windows; override with `SNAKE_GAME_HOME`).
 
-## 🖥️ Platform Support
+## 🧑‍💻 Development
 
-✅ **Windows 10/11**: Full support with native CMD/PowerShell  
-✅ **macOS**: Perfect compatibility with Terminal.app and iTerm2  
-✅ **Linux**: Works on all major distributions  
-✅ **WSL**: Windows Subsystem for Linux supported
+```
+snake_game/
+  engine.py    game rules only (no I/O) — unit-tested
+  display.py   cell shape and per-direction move timing
+  terminal.py  raw keyboard input, ANSI output, terminal sizing
+  scores.py    best-score storage
+  settings.py  saved display calibration
+  game.py      menus, rendering, main loop, CLI
+tests/         python -m unittest discover -s tests
+```
+
+Requires Python 3.7+.
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT — see [LICENSE](LICENSE).
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 🎉 Enjoy Playing!
-
-Have fun playing this classic game! Try to beat your high score and challenge your friends.
-
----
-
-Made with ❤️ by kit_lee
+Made with ❤️ by Kit Lee
